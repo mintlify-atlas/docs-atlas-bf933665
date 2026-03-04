@@ -103,9 +103,15 @@ Currently, there are no enforced rate limits on the API. However, please use the
 
 ### User
 
-<Card title="Get Current User" icon="user" href="/api/endpoints/me">
-  `GET /api/me` - Returns the authenticated user object
-</Card>
+<CardGroup cols={2}>
+  <Card title="Get Current User" icon="user" href="/api/endpoints/me">
+    `GET /api/me` - Returns the authenticated user object
+  </Card>
+  
+  <Card title="Default Folders" icon="folder-plus" href="/api/endpoints/me#create-default-folders">
+    `POST /api/me/default-folders` - Create default folders
+  </Card>
+</CardGroup>
 
 ### Folders
 
@@ -124,6 +130,36 @@ Currently, there are no enforced rate limits on the API. However, please use the
 <Card title="Tag Endpoints" icon="tag" href="/api/endpoints/tags">
   Complete documentation for tag creation and management
 </Card>
+
+### Utility
+
+<Card title="Report Error" icon="triangle-exclamation">
+  `POST /api/report-error` - Client-side error reporting for debugging
+</Card>
+
+<Accordion title="Report Error Details">
+  This endpoint allows client applications to report errors to the server for logging and debugging purposes.
+
+  **Request Body:**
+  ```json
+  {
+    "ref": "error-reference-id",
+    "error": "Error message or stack trace"
+  }
+  ```
+
+  **Response:**
+  ```json
+  {
+    "ok": true,
+    "ref": "error-reference-id"
+  }
+  ```
+
+  <Note>
+  This endpoint does not require authentication and is primarily used for client-side error tracking.
+  </Note>
+</Accordion>
 
 ## Quick Start
 

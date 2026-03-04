@@ -98,3 +98,67 @@ Returns the authenticated user object.
 | Status Code | Error Message | Description |
 |------------|---------------|-------------|
 | 401 | Not authenticated | No valid session found |
+
+## Create Default Folders
+
+Creates default folders for the authenticated user if they don't already exist. This endpoint is idempotent.
+
+<CodeGroup>
+```bash curl
+curl -X POST https://jottar.vercel.com/api/me/default-folders \
+  -H "Cookie: better-auth.session_token=your-session-token"
+```
+
+```typescript TypeScript
+const result = await api<{ ok: boolean }>("/api/me/default-folders", {
+  method: "POST",
+});
+
+if (result.ok) {
+  console.log("Default folders created");
+}
+```
+</CodeGroup>
+
+### Default Folders Created
+
+This endpoint creates two default folders:
+
+1. **Shared Notes** (`slug: "shared-notes"`)
+   - Description: "Notes you made available to others"
+   
+2. **Imported Notes** (`slug: "imported-notes"`)
+   - Description: "Notes you added from other people's shared notes"
+
+<Note>
+If the folders already exist, this endpoint does nothing and returns successfully. It's safe to call multiple times.
+</Note>
+
+### Response
+
+<ResponseField name="ok" type="boolean" required>
+  Success indicator (always `true` for successful responses)
+</ResponseField>
+
+### Example Response
+
+<Tabs>
+  <Tab title="Success">
+    ```json
+    {
+      "ok": true
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Unauthenticated">
+    ```json
+    {
+      "ok": false,
+      "error": "Not authenticated"
+    }
+    ```
+    
+    **Status Code:** `401 Unauthorized`
+  </Tab>
+</Tabs>

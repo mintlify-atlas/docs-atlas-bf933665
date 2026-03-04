@@ -1,0 +1,389 @@
+---
+title: Organization
+description: Pin, favorite, archive, and trash notes to keep your workspace organized
+---
+
+## Overview
+
+Jottar provides multiple organizational features to help you manage your notes:
+
+- **Pinning**: Keep important notes at the top
+- **Favorites**: Mark notes for quick access
+- **Archiving**: Hide completed or inactive notes
+- **Trash**: Soft delete notes with restoration capability
+
+These features use boolean flags and timestamps on the Note model:
+
+```prisma
+model Note {
+  // ...
+  isPinned  Boolean    @default(false)
+  favorite  Boolean    @default(false)
+  archived  Boolean    @default(false)
+  trashedAt DateTime?  @db.Timestamp(6)
+  // ...
+}
+```
+
+## Pinning notes
+
+Pinned notes appear at the top of lists, making them easily accessible.
+
+### Toggle pin status
+
+```typescript
+// POST /api/notes/[id]/toggle-pin
+```
+
+This endpoint uses an efficient SQL query to toggle the pin status in a single operation:
+
+From `/workspace/source/src/app/api/notes/[id]/toggle-pin/route.ts:18-30`:
+
+```typescript
+const rows = await prisma.$queryRaw<TogglePinRow[]>`
+  UPDATE "note"
+  SET "isPinned" = NOT "isPinned", "updatedAt" = NOW()
+  WHERE id = ${id}::uuid AND "userId" = ${user.id}::uuid
+  RETURNING *;
+`;
+
+const data = rows[0];
+return apiSuccess({ 
+  data, 
+  message: data.isPinned ? "Pinned" : "Unpinned" 
+});
+```
+
+<Note>
+  The toggle operation uses a raw SQL query with `NOT "isPinned"` for optimal performance, avoiding a read-then-write pattern.
+</Note>
+
+### Server action alternative
+
+```typescript
+import { togglePin } from "@/lib/actions/note-actions";
+
+const result = await togglePin(noteId);
+if (result.error) {
+  console.error(result.error);
+} else {
+  console.log(result.message); // "Pinned" or "Unpinned"
+}
+```
+
+### Pinning in overview mode
+
+The overview query (GET `/api/notes?mode=overview`) prioritizes pinned notes:
+
+1. Fetches up to 2 pinned notes
+2. Fills remaining slots (up to 3 total) with unpinned notes
+3. Orders all by most recently updated
+
+Implementation at `/workspace/source/src/app/api/notes/route.ts:50-76`:
+
+```typescript
+const pinned = await prisma.note.findMany({
+  where: {
+    userId: user.id,
+    archived: false,
+    trashedAt: null,
+    isPinned: true,
+  },
+  orderBy: { updatedAt: "desc" },
+  take: 2,
+});
+
+const remaining = 3 - pinned.length;
+
+const unpinned = await prisma.note.findMany({
+  where: {
+    userId: user.id,
+    archived: false,
+    trashedAt: null,
+    isPinned: false,
+  },
+  orderBy: { updatedAt: "desc" },
+  take: remaining,
+});
+
+return apiSuccess({ data: [...pinned, ...unpinned] });
+```
+
+## Favorites
+
+Favorites allow users to mark notes for quick access without affecting sort order.
+
+### Toggle favorite status
+
+```typescript
+// POST /api/notes/[id]/toggle-favorite
+```
+
+Uses the same efficient toggle pattern as pinning:
+
+From `/workspace/source/src/app/api/notes/[id]/toggle-favorite/route.ts:18-34`:
+
+```typescript
+const rows = await prisma.$queryRaw<ToggleFavoriteRow[]>`
+  UPDATE "note"
+  SET "favorite" = NOT "favorite", "updatedAt" = NOW()
+  WHERE id = ${id}::uuid AND "userId" = ${user.id}::uuid
+  RETURNING *;
+`;
+
+const data = rows[0];
+
+return apiSuccess({
+  data,
+  message: data.favorite 
+    ? "Added to favorites" 
+    : "Removed from favorites",
+});
+```
+
+### Server action alternative
+
+```typescript
+import { toggleFavorite } from "@/lib/actions/note-actions";
+
+const result = await toggleFavorite(noteId);
+console.log(result.message); 
+// "Added to favorites" or "Removed from favorites"
+```
+
+<Tip>
+  Favorites and pins serve different purposes: use pins to affect display order and favorites to create a collection for filtering.
+</Tip>
+
+## Archiving
+
+Archived notes are hidden from the main view but remain accessible.
+
+### Toggle archive status
+
+```typescript
+// POST /api/notes/[id]/toggle-archive
+```
+
+Implementation at `/workspace/source/src/app/api/notes/[id]/toggle-archive/route.ts:18-34`:
+
+```typescript
+const rows = await prisma.$queryRaw<ToggleArchiveRow[]>`
+  UPDATE "note"
+  SET "archived" = NOT "archived", "updatedAt" = NOW()
+  WHERE id = ${id}::uuid AND "userId" = ${user.id}::uuid
+  RETURNING *;
+`;
+
+const data = rows[0];
+
+return apiSuccess({
+  data,
+  message: data.archived ? "Archived" : "Unarchived",
+});
+```
+
+### Filtering archived notes
+
+Most queries exclude archived notes by default:
+
+```typescript
+where: {
+  userId: user.id,
+  archived: false,
+  trashedAt: null,
+}
+```
+
+To show only archived notes:
+
+```typescript
+where: {
+  userId: user.id,
+  archived: true,
+  trashedAt: null,
+}
+```
+
+### Server action alternative
+
+```typescript
+import { toggleArchive } from "@/lib/actions/note-actions";
+
+const result = await toggleArchive(noteId);
+console.log(result.message); // "Archived" or "Unarchived"
+```
+
+## Trash and restore
+
+Trash provides soft deletion using a timestamp instead of removing records.
+
+### Trash a note
+
+```typescript
+// POST /api/notes/[id]/trash
+```
+
+Sets the `trashedAt` timestamp to the current time:
+
+From `/workspace/source/src/app/api/notes/[id]/trash/route.ts:13-21`:
+
+```typescript
+const data = await prisma.note.update({
+  where: {
+    id,
+    userId: user.id,
+  },
+  data: {
+    trashedAt: new Date(),
+  },
+});
+```
+
+### Restore a note
+
+```typescript
+// POST /api/notes/[id]/restore
+```
+
+Clears the `trashedAt` timestamp:
+
+From `/workspace/source/src/app/api/notes/[id]/restore/route.ts:13-16`:
+
+```typescript
+const data = await prisma.note.update({
+  where: { id, userId: user.id },
+  data: { trashedAt: null },
+});
+```
+
+### Filtering trashed notes
+
+Active notes have `trashedAt: null`:
+
+```typescript
+where: {
+  userId: user.id,
+  trashedAt: null,
+}
+```
+
+To show only trashed notes:
+
+```typescript
+where: {
+  userId: user.id,
+  trashedAt: { not: null },
+}
+```
+
+### Automatic cleanup
+
+Jottar includes a cron job to permanently delete old trashed notes. The endpoint is at `/workspace/source/src/app/api/cron/cleanup-trashed-notes/route.ts`.
+
+<Warning>
+  Trashed notes are soft-deleted and can be restored. Implement a cleanup policy to permanently delete notes after a retention period (e.g., 30 days).
+</Warning>
+
+### Server actions
+
+```typescript
+import { trashNote, restoreNote } from "@/lib/actions/note-actions";
+
+// Trash a note
+const trashResult = await trashNote(noteId);
+
+// Restore a note
+const restoreResult = await restoreNote(noteId);
+```
+
+## Toggle endpoints summary
+
+All toggle endpoints follow the same pattern:
+
+<Steps>
+  <Step title="Single SQL operation">
+    Use `UPDATE ... SET field = NOT field` for atomic toggle
+  </Step>
+
+  <Step title="Return updated record">
+    Use `RETURNING *` to get the new state
+  </Step>
+
+  <Step title="Contextual message">
+    Return a user-friendly message based on the new state
+  </Step>
+
+  <Step title="Update timestamp">
+    Automatically update `updatedAt` to reflect the change
+  </Step>
+</Steps>
+
+| Endpoint | Field | Messages |
+|----------|-------|----------|
+| `/api/notes/[id]/toggle-pin` | `isPinned` | "Pinned" / "Unpinned" |
+| `/api/notes/[id]/toggle-favorite` | `favorite` | "Added to favorites" / "Removed from favorites" |
+| `/api/notes/[id]/toggle-archive` | `archived` | "Archived" / "Unarchived" |
+
+<Accordion title="Why use raw SQL queries for toggles?">
+  The toggle endpoints use `prisma.$queryRaw` instead of the standard Prisma client for performance:
+
+  **Standard approach (2 queries):**
+  ```typescript
+  const note = await prisma.note.findUnique({ where: { id } });
+  const updated = await prisma.note.update({
+    where: { id },
+    data: { isPinned: !note.isPinned },
+  });
+  ```
+
+  **Optimized approach (1 query):**
+  ```typescript
+  const rows = await prisma.$queryRaw`
+    UPDATE "note"
+    SET "isPinned" = NOT "isPinned", "updatedAt" = NOW()
+    WHERE id = ${id}::uuid AND "userId" = ${user.id}::uuid
+    RETURNING *;
+  `;
+  ```
+
+  Benefits:
+  - Reduces round trips to the database
+  - Eliminates race conditions
+  - Improves response time
+  - Atomic operation guaranteed
+</Accordion>
+
+## Organizational feature combinations
+
+These features can be combined for powerful filtering:
+
+```typescript
+// Pinned favorites that aren't archived or trashed
+where: {
+  userId: user.id,
+  isPinned: true,
+  favorite: true,
+  archived: false,
+  trashedAt: null,
+}
+
+// Recently trashed notes (within 7 days)
+where: {
+  userId: user.id,
+  trashedAt: {
+    gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+  },
+}
+
+// Active notes (excludes archived and trashed)
+where: {
+  userId: user.id,
+  archived: false,
+  trashedAt: null,
+}
+```
+
+<Note>
+  The database includes an index on `trashedAt` for efficient trash queries: `@@index([trashedAt])`
+</Note>

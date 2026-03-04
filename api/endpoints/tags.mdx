@@ -1,0 +1,259 @@
+---
+title: 'Tags'
+description: 'Create and manage note tags'
+---
+
+## List Tags
+
+<CodeGroup>
+```bash curl
+curl -X GET https://jottar.vercel.com/api/tags \
+  -H "Cookie: better-auth.session_token=your-session-token"
+```
+
+```typescript TypeScript
+const tags = await api<{ data: unknown[] }>("/api/tags");
+```
+</CodeGroup>
+
+Returns all tags for the authenticated user with their note associations.
+
+### Response
+
+<ResponseField name="ok" type="boolean" required>
+  Success indicator
+</ResponseField>
+
+<ResponseField name="data" type="array" required>
+  Array of tag objects
+  
+  <Expandable title="Tag properties">
+    <ResponseField name="id" type="string" required>
+      Tag unique identifier (UUID)
+    </ResponseField>
+    
+    <ResponseField name="name" type="string" required>
+      Tag name
+    </ResponseField>
+    
+    <ResponseField name="userId" type="string" required>
+      Owner user UUID
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="string" required>
+      Creation timestamp (ISO 8601)
+    </ResponseField>
+    
+    <ResponseField name="updatedAt" type="string" required>
+      Last update timestamp (ISO 8601)
+    </ResponseField>
+    
+    <ResponseField name="noteTags" type="array" required>
+      Array of note-tag associations
+      
+      <Expandable title="NoteTag properties">
+        <ResponseField name="noteId" type="string" required>
+          Associated note UUID
+        </ResponseField>
+        
+        <ResponseField name="tagId" type="string" required>
+          Associated tag UUID
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example Response
+
+<Tabs>
+  <Tab title="Success">
+    ```json
+    {
+      "ok": true,
+      "data": [
+        {
+          "id": "550e8400-e29b-41d4-a716-446655440000",
+          "name": "urgent",
+          "userId": "550e8400-e29b-41d4-a716-446655440020",
+          "createdAt": "2024-01-15T10:30:00.000Z",
+          "updatedAt": "2024-01-15T10:30:00.000Z",
+          "noteTags": [
+            {
+              "noteId": "550e8400-e29b-41d4-a716-446655440010",
+              "tagId": "550e8400-e29b-41d4-a716-446655440000"
+            },
+            {
+              "noteId": "550e8400-e29b-41d4-a716-446655440011",
+              "tagId": "550e8400-e29b-41d4-a716-446655440000"
+            }
+          ]
+        },
+        {
+          "id": "550e8400-e29b-41d4-a716-446655440001",
+          "name": "important",
+          "userId": "550e8400-e29b-41d4-a716-446655440020",
+          "createdAt": "2024-01-20T09:15:00.000Z",
+          "updatedAt": "2024-01-20T09:15:00.000Z",
+          "noteTags": [
+            {
+              "noteId": "550e8400-e29b-41d4-a716-446655440010",
+              "tagId": "550e8400-e29b-41d4-a716-446655440001"
+            }
+          ]
+        },
+        {
+          "id": "550e8400-e29b-41d4-a716-446655440002",
+          "name": "todo",
+          "userId": "550e8400-e29b-41d4-a716-446655440020",
+          "createdAt": "2024-02-01T14:22:00.000Z",
+          "updatedAt": "2024-02-01T14:22:00.000Z",
+          "noteTags": []
+        }
+      ]
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Unauthenticated">
+    ```json
+    {
+      "ok": false,
+      "error": "Not authenticated"
+    }
+    ```
+    
+    **Status Code:** `401 Unauthorized`
+  </Tab>
+</Tabs>
+
+---
+
+## Create Tag
+
+<CodeGroup>
+```bash curl
+curl -X POST https://jottar.vercel.com/api/tags \
+  -H "Content-Type: application/json" \
+  -H "Cookie: better-auth.session_token=your-session-token" \
+  -d '{"name": "urgent"}'
+```
+
+```typescript TypeScript
+const createTag = await api<{ data: unknown }>("/api/tags", {
+  method: "POST",
+  body: JSON.stringify({ name: "urgent" }),
+});
+```
+</CodeGroup>
+
+Creates a new tag for the authenticated user.
+
+### Request Body
+
+<ParamField body="name" type="string" required>
+  Tag name (e.g., "urgent", "important", "todo")
+</ParamField>
+
+### Response
+
+<ResponseField name="ok" type="boolean" required>
+  Success indicator
+</ResponseField>
+
+<ResponseField name="data" type="object" required>
+  Created tag object
+</ResponseField>
+
+### Example Response
+
+<Tabs>
+  <Tab title="Success">
+    ```json
+    {
+      "ok": true,
+      "data": {
+        "id": "550e8400-e29b-41d4-a716-446655440000",
+        "name": "urgent",
+        "userId": "550e8400-e29b-41d4-a716-446655440020",
+        "createdAt": "2024-03-04T15:30:00.000Z",
+        "updatedAt": "2024-03-04T15:30:00.000Z"
+      }
+    }
+    ```
+    
+    **Status Code:** `201 Created`
+  </Tab>
+  
+  <Tab title="Validation Error">
+    ```json
+    {
+      "ok": false,
+      "error": "name is required"
+    }
+    ```
+    
+    **Status Code:** `400 Bad Request`
+  </Tab>
+  
+  <Tab title="Unauthenticated">
+    ```json
+    {
+      "ok": false,
+      "error": "Not authenticated"
+    }
+    ```
+    
+    **Status Code:** `401 Unauthorized`
+  </Tab>
+</Tabs>
+
+---
+
+## Tag Management Notes
+
+<Note>
+Tags are automatically associated with notes through the `noteTags` junction table. To add a tag to a note, you'll need to create a note-tag association through your database or a separate endpoint.
+</Note>
+
+### Understanding noteTags
+
+The `noteTags` array in the GET response shows which notes are using each tag:
+
+```typescript
+// Example: Tag used by 2 notes
+{
+  "id": "tag-uuid",
+  "name": "urgent",
+  "noteTags": [
+    { "noteId": "note-1-uuid", "tagId": "tag-uuid" },
+    { "noteId": "note-2-uuid", "tagId": "tag-uuid" }
+  ]
+}
+```
+
+You can use this to:
+- Count how many notes have a specific tag
+- Find all notes associated with a tag
+- Determine if a tag is unused (empty `noteTags` array)
+
+---
+
+## Error Handling
+
+All error responses follow the standard format:
+
+<ResponseField name="ok" type="boolean">
+  `false` when request fails
+</ResponseField>
+
+<ResponseField name="error" type="string">
+  Error message describing what went wrong
+</ResponseField>
+
+### Common Errors
+
+| Status Code | Error Message | Description |
+|------------|---------------|-------------|
+| 401 | Not authenticated | No valid session found |
+| 400 | name is required | Missing required field in request body |

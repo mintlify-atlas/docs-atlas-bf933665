@@ -1,0 +1,421 @@
+---
+title: 'Folders'
+description: 'Organize and manage note folders'
+---
+
+## List Folders
+
+<CodeGroup>
+```bash curl
+curl -X GET https://jottar.vercel.com/api/folders \
+  -H "Cookie: better-auth.session_token=your-session-token"
+```
+
+```typescript TypeScript
+const folders = await api<{ data: unknown[] }>("/api/folders");
+```
+</CodeGroup>
+
+### Query Parameters
+
+<ParamField query="mode" type="string" default="list">
+  Query mode for different response formats
+  - `list` - Returns all user folders with note counts
+  - `overview` - Returns top 3 recent folders
+  - `dropdown` - Returns minimal folder list (id, name) sorted by name
+</ParamField>
+
+<ParamField query="folderId" type="string">
+  Folder UUID to get single folder with notes
+</ParamField>
+
+<ParamField query="folderSlug" type="string">
+  Folder slug to get single folder with notes (alternative to folderId)
+</ParamField>
+
+<ParamField query="take" type="number">
+  Number of notes to return when fetching single folder (pagination)
+</ParamField>
+
+<ParamField query="skip" type="number">
+  Number of notes to skip when fetching single folder (pagination)
+</ParamField>
+
+### Response
+
+<ResponseField name="ok" type="boolean" required>
+  Success indicator
+</ResponseField>
+
+<ResponseField name="data" type="object | array" required>
+  Folder object (single folder query) or array of folders
+  
+  <Expandable title="Folder properties">
+    <ResponseField name="id" type="string" required>
+      Folder unique identifier (UUID)
+    </ResponseField>
+    
+    <ResponseField name="name" type="string" required>
+      Folder name
+    </ResponseField>
+    
+    <ResponseField name="slug" type="string" required>
+      URL-friendly folder identifier
+    </ResponseField>
+    
+    <ResponseField name="description" type="string | null">
+      Folder description
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="string" required>
+      Creation timestamp (ISO 8601)
+    </ResponseField>
+    
+    <ResponseField name="updatedAt" type="string" required>
+      Last update timestamp (ISO 8601)
+    </ResponseField>
+    
+    <ResponseField name="_count" type="object">
+      Count object containing note count
+      
+      <Expandable title="Count properties">
+        <ResponseField name="notes" type="number" required>
+          Total number of notes in folder
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="notes" type="array">
+      Array of notes (only when fetching single folder with folderId/folderSlug)
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example Responses
+
+<Tabs>
+  <Tab title="List Mode">
+    ```json
+    {
+      "ok": true,
+      "data": [
+        {
+          "id": "550e8400-e29b-41d4-a716-446655440000",
+          "name": "Work",
+          "slug": "work",
+          "description": "Work related notes",
+          "createdAt": "2024-01-15T10:30:00.000Z",
+          "updatedAt": "2024-03-04T14:22:00.000Z",
+          "_count": {
+            "notes": 12
+          }
+        },
+        {
+          "id": "550e8400-e29b-41d4-a716-446655440001",
+          "name": "Personal",
+          "slug": "personal",
+          "description": null,
+          "createdAt": "2024-01-20T09:15:00.000Z",
+          "updatedAt": "2024-03-03T11:45:00.000Z",
+          "_count": {
+            "notes": 8
+          }
+        }
+      ]
+    }
+    ```
+    
+    Ordered by `updatedAt` descending.
+  </Tab>
+  
+  <Tab title="Overview Mode">
+    ```json
+    {
+      "ok": true,
+      "data": [
+        {
+          "id": "550e8400-e29b-41d4-a716-446655440000",
+          "name": "Work",
+          "slug": "work",
+          "description": "Work related notes",
+          "updatedAt": "2024-03-04T14:22:00.000Z",
+          "_count": {
+            "notes": 12
+          }
+        },
+        {
+          "id": "550e8400-e29b-41d4-a716-446655440001",
+          "name": "Personal",
+          "slug": "personal",
+          "description": null,
+          "updatedAt": "2024-03-03T11:45:00.000Z",
+          "_count": {
+            "notes": 8
+          }
+        }
+      ]
+    }
+    ```
+    
+    Returns top 3 most recently updated folders.
+  </Tab>
+  
+  <Tab title="Dropdown Mode">
+    ```json
+    {
+      "ok": true,
+      "data": [
+        {
+          "id": "550e8400-e29b-41d4-a716-446655440001",
+          "name": "Personal"
+        },
+        {
+          "id": "550e8400-e29b-41d4-a716-446655440000",
+          "name": "Work"
+        }
+      ]
+    }
+    ```
+    
+    Minimal folder list sorted alphabetically by name.
+  </Tab>
+  
+  <Tab title="Single Folder">
+    ```json
+    {
+      "ok": true,
+      "data": {
+        "id": "550e8400-e29b-41d4-a716-446655440000",
+        "name": "Work",
+        "slug": "work",
+        "description": "Work related notes",
+        "createdAt": "2024-01-15T10:30:00.000Z",
+        "updatedAt": "2024-03-04T14:22:00.000Z",
+        "_count": {
+          "notes": 12
+        },
+        "notes": [
+          {
+            "id": "550e8400-e29b-41d4-a716-446655440010",
+            "title": "Project Proposal",
+            "content": "# Project Proposal\n\nDetails...",
+            "folderId": "550e8400-e29b-41d4-a716-446655440000",
+            "userId": "550e8400-e29b-41d4-a716-446655440020",
+            "isPinned": false,
+            "favorite": true,
+            "archived": false,
+            "trashedAt": null,
+            "createdAt": "2024-02-01T08:00:00.000Z",
+            "updatedAt": "2024-03-04T14:22:00.000Z",
+            "noteTags": [],
+            "allowCopy": false,
+            "shareable": false,
+            "shareLinkType": null
+          }
+        ]
+      }
+    }
+    ```
+    
+    Notes are filtered to non-archived, non-trashed, and ordered by `updatedAt` descending.
+  </Tab>
+</Tabs>
+
+---
+
+## Get Folder with Notes
+
+<CodeGroup>
+```bash curl (by ID)
+curl -X GET "https://jottar.vercel.com/api/folders?folderId=550e8400-e29b-41d4-a716-446655440000&take=20&skip=0" \
+  -H "Cookie: better-auth.session_token=your-session-token"
+```
+
+```bash curl (by slug)
+curl -X GET "https://jottar.vercel.com/api/folders?folderSlug=work&take=20&skip=0" \
+  -H "Cookie: better-auth.session_token=your-session-token"
+```
+
+```typescript TypeScript
+const folder = await api<{ data: unknown }>(
+  "/api/folders?folderSlug=work&take=20&skip=0"
+);
+```
+</CodeGroup>
+
+### Query Parameters
+
+<ParamField query="folderId" type="string">
+  Folder UUID (use either folderId or folderSlug)
+</ParamField>
+
+<ParamField query="folderSlug" type="string">
+  Folder slug (use either folderId or folderSlug)
+</ParamField>
+
+<ParamField query="take" type="number">
+  Number of notes to return (pagination limit)
+</ParamField>
+
+<ParamField query="skip" type="number">
+  Number of notes to skip (pagination offset)
+</ParamField>
+
+### Response
+
+Returns a single folder object with included notes array.
+
+**Note Filtering:**
+- Only includes notes where `archived=false` and `trashedAt=null`
+- Ordered by `updatedAt` descending
+- Pagination via `take` and `skip` parameters
+
+---
+
+## Create Folder
+
+<CodeGroup>
+```bash curl
+curl -X POST https://jottar.vercel.com/api/folders \
+  -H "Content-Type: application/json" \
+  -H "Cookie: better-auth.session_token=your-session-token" \
+  -d '{
+    "name": "Work",
+    "slug": "work",
+    "description": "Work notes"
+  }'
+```
+
+```typescript TypeScript
+const createFolder = await api<{ data: unknown }>("/api/folders", {
+  method: "POST",
+  body: JSON.stringify({
+    name: "Work",
+    slug: "work",
+    description: "Work notes",
+  }),
+});
+```
+</CodeGroup>
+
+### Request Body
+
+<ParamField body="name" type="string" required>
+  Folder name (displayed to user)
+</ParamField>
+
+<ParamField body="slug" type="string" required>
+  URL-friendly identifier (must be unique per user)
+</ParamField>
+
+<ParamField body="description" type="string">
+  Folder description (optional)
+</ParamField>
+
+<ParamField body="userId" type="string">
+  User UUID (optional, defaults to authenticated user)
+</ParamField>
+
+### Response
+
+<ResponseField name="ok" type="boolean" required>
+  Success indicator
+</ResponseField>
+
+<ResponseField name="data" type="object" required>
+  Created folder object
+</ResponseField>
+
+### Example Response
+
+<Tabs>
+  <Tab title="Success">
+    ```json
+    {
+      "ok": true,
+      "data": {
+        "id": "550e8400-e29b-41d4-a716-446655440000",
+        "name": "Work",
+        "slug": "work",
+        "description": "Work notes",
+        "userId": "550e8400-e29b-41d4-a716-446655440020",
+        "createdAt": "2024-03-04T15:30:00.000Z",
+        "updatedAt": "2024-03-04T15:30:00.000Z"
+      }
+    }
+    ```
+    
+    **Status Code:** `201 Created`
+  </Tab>
+  
+  <Tab title="Validation Error">
+    ```json
+    {
+      "ok": false,
+      "error": "name and slug are required"
+    }
+    ```
+    
+    **Status Code:** `400 Bad Request`
+  </Tab>
+  
+  <Tab title="Create Error">
+    ```json
+    {
+      "ok": false,
+      "error": "There was an error creating your folder."
+    }
+    ```
+    
+    **Status Code:** `400 Bad Request`
+    
+    Common causes:
+    - Duplicate slug for user
+    - Invalid UUID format
+  </Tab>
+</Tabs>
+
+---
+
+## Error Responses
+
+<Tabs>
+  <Tab title="Unauthenticated">
+    ```json
+    {
+      "ok": false,
+      "error": "Not authenticated"
+    }
+    ```
+    **Status Code:** `401`
+  </Tab>
+  
+  <Tab title="Missing Parameters">
+    ```json
+    {
+      "ok": false,
+      "error": "Either folderId or folderSlug must be provided"
+    }
+    ```
+    **Status Code:** `400`
+  </Tab>
+</Tabs>
+
+---
+
+## Notes on Pagination
+
+When fetching a folder with notes:
+
+```typescript
+// First page (20 notes)
+const page1 = await api("/api/folders?folderSlug=work&take=20&skip=0");
+
+// Second page (next 20 notes)
+const page2 = await api("/api/folders?folderSlug=work&take=20&skip=20");
+
+// Third page (next 20 notes)
+const page3 = await api("/api/folders?folderSlug=work&take=20&skip=40");
+```
+
+Use the `_count.notes` field to determine total number of notes and calculate pagination.

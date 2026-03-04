@@ -1,0 +1,390 @@
+---
+title: "React Native Examples"
+description: "Complete TypeScript examples for using Jottar API in React Native apps"
+---
+
+## Overview
+
+These examples use the TypeScript helper function from the [setup guide](/api/react-native/setup). All examples include proper typing and error handling.
+
+## Identity
+
+Get the current authenticated user's information.
+
+```typescript
+const me = await api<{ data: { id: string; email?: string } }>("/api/me");
+
+if (!me.ok) {
+  console.error("Failed to fetch user:", me.error);
+} else {
+  console.log("User ID:", me.data.id);
+  console.log("Email:", me.data.email);
+}
+```
+
+## Folders
+
+<Tabs>
+  <Tab title="List Folders">
+    Retrieve folders in different modes:
+
+    ```typescript
+    // Get all folders
+    const folders = await api<{ data: unknown[] }>("/api/folders");
+
+    // Get folder overview
+    const folderOverview = await api<{ data: unknown[] }>(
+      "/api/folders?mode=overview"
+    );
+
+    // Get folders for dropdown UI
+    const folderDropdown = await api<{ data: unknown[] }>(
+      "/api/folders?mode=dropdown"
+    );
+    ```
+  </Tab>
+
+  <Tab title="Get Folder by Slug">
+    Fetch a specific folder with pagination:
+
+    ```typescript
+    const oneFolderBySlug = await api<{ data: unknown }>(
+      "/api/folders?folderSlug=work&take=20&skip=0",
+    );
+
+    if (!oneFolderBySlug.ok) {
+      console.error("Folder not found:", oneFolderBySlug.error);
+    } else {
+      console.log("Folder data:", oneFolderBySlug.data);
+    }
+    ```
+  </Tab>
+
+  <Tab title="Create Folder">
+    Create a new folder:
+
+    ```typescript
+    const createFolder = await api<{ data: unknown }>("/api/folders", {
+      method: "POST",
+      body: JSON.stringify({
+        name: "Work",
+        slug: "work",
+        description: "Work notes",
+      }),
+    });
+
+    if (!createFolder.ok) {
+      console.error("Failed to create folder:", createFolder.error);
+    } else {
+      console.log("Folder created:", createFolder.data);
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Notes
+
+<Tabs>
+  <Tab title="List Notes">
+    Retrieve notes in different modes:
+
+    ```typescript
+    // Get all notes
+    const notes = await api<{ data: unknown[] }>("/api/notes");
+
+    // Get notes overview
+    const notesOverview = await api<{ data: unknown[] }>(
+      "/api/notes?mode=overview"
+    );
+
+    // Get one note by query parameter
+    const noteByQuery = await api<{ data: unknown }>(
+      "/api/notes?mode=one&id=<note-id>"
+    );
+
+    // Get one note by path parameter
+    const noteByPath = await api<{ data: unknown }>("/api/notes/<note-id>");
+    ```
+  </Tab>
+
+  <Tab title="Create Note">
+    Create a new note:
+
+    ```typescript
+    const createNote = await api<{ data: unknown }>("/api/notes", {
+      method: "POST",
+      body: JSON.stringify({ content: "My note body" }),
+    });
+
+    if (!createNote.ok) {
+      console.error("Failed to create note:", createNote.error);
+    } else {
+      console.log("Note created:", createNote.data);
+    }
+    ```
+  </Tab>
+
+  <Tab title="Update Note">
+    Update note content or metadata:
+
+    ```typescript
+    // Update content
+    const updateContent = await api<{ data: unknown }>("/api/notes/<note-id>", {
+      method: "PATCH",
+      body: JSON.stringify({ content: "Updated content" }),
+    });
+
+    // Update title/folder
+    const updateDetails = await api<{ data: unknown; message?: string }>(
+      "/api/notes/<note-id>",
+      {
+        method: "PATCH",
+        body: JSON.stringify({ title: "New title", folderId: null }),
+      },
+    );
+
+    if (!updateContent.ok) {
+      console.error("Update failed:", updateContent.error);
+    }
+    ```
+  </Tab>
+
+  <Tab title="Note Actions">
+    Common note operations:
+
+    ```typescript
+    // Duplicate a note
+    const duplicate = await api<{ data: unknown }>(
+      "/api/notes/<note-id>/duplicate",
+      { method: "POST" }
+    );
+
+    // Toggle pin status
+    const togglePin = await api<{ data: unknown; message: string }>(
+      "/api/notes/<note-id>/toggle-pin",
+      { method: "POST" },
+    );
+
+    // Toggle favorite status
+    const toggleFavorite = await api<{ data: unknown; message: string }>(
+      "/api/notes/<note-id>/toggle-favorite",
+      { method: "POST" },
+    );
+
+    // Toggle archive status
+    const toggleArchive = await api<{ data: unknown; message: string }>(
+      "/api/notes/<note-id>/toggle-archive",
+      { method: "POST" },
+    );
+
+    if (!togglePin.ok) {
+      console.error("Action failed:", togglePin.error);
+    } else {
+      console.log("Success:", togglePin.message);
+    }
+    ```
+  </Tab>
+
+  <Tab title="Move & Delete">
+    Move notes between folders or delete them:
+
+    ```typescript
+    // Move to a different folder
+    const moveFolder = await api<{ success: true }>(
+      "/api/notes/<note-id>/folder",
+      {
+        method: "PATCH",
+        body: JSON.stringify({ folderId: "<folder-id-or-null>" }),
+      }
+    );
+
+    // Move to trash
+    const trash = await api<{ data: unknown }>(
+      "/api/notes/<note-id>/trash",
+      { method: "POST" }
+    );
+
+    // Restore from trash
+    const restore = await api<{ data: unknown }>(
+      "/api/notes/<note-id>/restore",
+      { method: "POST" }
+    );
+
+    if (!trash.ok) {
+      console.error("Failed to trash note:", trash.error);
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Tags
+
+<Tabs>
+  <Tab title="List Tags">
+    Retrieve all tags:
+
+    ```typescript
+    const tags = await api<{ data: unknown[] }>("/api/tags");
+
+    if (!tags.ok) {
+      console.error("Failed to fetch tags:", tags.error);
+    } else {
+      console.log("Available tags:", tags.data);
+    }
+    ```
+  </Tab>
+
+  <Tab title="Create Tag">
+    Create a new tag:
+
+    ```typescript
+    const createTag = await api<{ data: unknown }>("/api/tags", {
+      method: "POST",
+      body: JSON.stringify({ name: "urgent" }),
+    });
+
+    if (!createTag.ok) {
+      console.error("Failed to create tag:", createTag.error);
+    } else {
+      console.log("Tag created:", createTag.data);
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Error Handling
+
+The API helper uses discriminated unions for type-safe error handling. Always check the `ok` field before accessing data:
+
+```typescript
+const res = await api<{ data: unknown[] }>("/api/notes");
+
+if (!res.ok) {
+  // Handle error - TypeScript knows res.error exists
+  console.log("API error:", res.error);
+  
+  // Show user-friendly message
+  Alert.alert("Error", `Failed to load notes: ${res.error}`);
+} else {
+  // Success - TypeScript knows res.data exists
+  console.log("Notes:", res.data);
+  
+  // Update your UI
+  setNotes(res.data);
+}
+```
+
+## Complete Example: Note Manager
+
+Here's a complete example of a React Native component that manages notes:
+
+```typescript
+import React, { useState, useEffect } from 'react';
+import { View, FlatList, Button, Alert } from 'react-native';
+
+interface Note {
+  id: string;
+  content: string;
+  title?: string;
+}
+
+function NoteManager() {
+  const [notes, setNotes] = useState<Note[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Load notes on mount
+  useEffect(() => {
+    loadNotes();
+  }, []);
+
+  const loadNotes = async () => {
+    const res = await api<{ data: Note[] }>("/api/notes");
+    
+    if (!res.ok) {
+      Alert.alert("Error", res.error);
+    } else {
+      setNotes(res.data);
+    }
+    
+    setLoading(false);
+  };
+
+  const createNote = async () => {
+    const res = await api<{ data: Note }>("/api/notes", {
+      method: "POST",
+      body: JSON.stringify({ content: "New note" }),
+    });
+
+    if (!res.ok) {
+      Alert.alert("Error", res.error);
+    } else {
+      setNotes([...notes, res.data]);
+    }
+  };
+
+  const deleteNote = async (noteId: string) => {
+    const res = await api<{ data: unknown }>(
+      `/api/notes/${noteId}/trash`,
+      { method: "POST" }
+    );
+
+    if (!res.ok) {
+      Alert.alert("Error", res.error);
+    } else {
+      setNotes(notes.filter(note => note.id !== noteId));
+    }
+  };
+
+  return (
+    <View>
+      <Button title="Create Note" onPress={createNote} />
+      <FlatList
+        data={notes}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => (
+          <NoteItem 
+            note={item} 
+            onDelete={() => deleteNote(item.id)}
+          />
+        )}
+      />
+    </View>
+  );
+}
+```
+
+<Note>
+  Replace `<note-id>`, `<folder-id>`, and other placeholder values with actual IDs from your data.
+</Note>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Type Safety" icon="shield-check">
+    Always provide TypeScript generics to the `api()` function for type-safe responses
+  </Card>
+  
+  <Card title="Error Messages" icon="message-exclamation">
+    Display user-friendly error messages using the `error` field from failed responses
+  </Card>
+  
+  <Card title="Loading States" icon="spinner">
+    Show loading indicators while API requests are in progress
+  </Card>
+  
+  <Card title="Optimistic Updates" icon="bolt">
+    Update UI immediately and rollback on error for better perceived performance
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Setup Guide" icon="gear" href="/api/react-native/setup">
+    Learn how to configure React Native with Jottar API
+  </Card>
+  
+  <Card title="API Reference" icon="book" href="/api">
+    View complete API endpoint documentation
+  </Card>
+</CardGroup>

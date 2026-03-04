@@ -1,0 +1,196 @@
+---
+title: 'API Overview'
+description: 'Introduction to the Jottar REST API'
+---
+
+## Introduction
+
+The Jottar API is a RESTful API that allows you to manage notes, folders, and tags programmatically. It's designed for both web and mobile applications, with built-in support for React Native.
+
+## Base URL
+
+```
+https://jottar.vercel.com
+```
+
+For local development:
+```
+http://localhost:3000
+```
+
+## Response Format
+
+All API endpoints use a consistent JSON envelope pattern:
+
+### Success Response
+```json
+{
+  "ok": true,
+  "data": { /* resource data */ }
+}
+```
+
+### Error Response
+```json
+{
+  "ok": false,
+  "error": "Error message"
+}
+```
+
+<Note>
+The `ok` field is always present and indicates whether the request was successful. Use this field to determine how to handle the response in your application.
+</Note>
+
+## Content-Type Requirements
+
+All requests with a body (POST, PATCH) must include:
+
+```
+Content-Type: application/json
+```
+
+## Authentication
+
+Most API endpoints require authentication using Better Auth sessions. See the [Authentication](/api/authentication) page for details on:
+
+- Cookie-based auth for web applications
+- Header-based auth for React Native
+- Handling 401 errors
+
+<Warning>
+Unauthenticated requests to protected endpoints will return `401` status with `{"ok": false, "error": "Not authenticated"}`.
+</Warning>
+
+## Error Handling
+
+The API uses standard HTTP status codes:
+
+<ResponseField name="200" type="Success">
+  Request completed successfully
+</ResponseField>
+
+<ResponseField name="201" type="Created">
+  Resource created successfully
+</ResponseField>
+
+<ResponseField name="400" type="Bad Request">
+  Invalid request parameters or validation failure
+</ResponseField>
+
+<ResponseField name="401" type="Unauthorized">
+  Not authenticated or invalid session
+</ResponseField>
+
+<ResponseField name="404" type="Not Found">
+  Resource not found or ownership check failed
+</ResponseField>
+
+### Error Response Example
+
+```json
+{
+  "ok": false,
+  "error": "content is required"
+}
+```
+
+## Rate Limits
+
+Currently, there are no enforced rate limits on the API. However, please use the API responsibly and avoid making excessive requests.
+
+## Endpoints
+
+### User
+
+<Card title="Get Current User" icon="user" href="/api/endpoints/me">
+  `GET /api/me` - Returns the authenticated user object
+</Card>
+
+### Folders
+
+<Card title="Folder Endpoints" icon="folder" href="/api/endpoints/folders">
+  Complete documentation for all folder endpoints including list, get, create, and overview modes
+</Card>
+
+### Notes
+
+<Card title="Note Endpoints" icon="note" href="/api/endpoints/notes">
+  Complete documentation for all note endpoints including CRUD operations, toggles, trash, and restore
+</Card>
+
+### Tags
+
+<Card title="Tag Endpoints" icon="tag" href="/api/endpoints/tags">
+  Complete documentation for tag creation and management
+</Card>
+
+## Quick Start
+
+### Basic Request Example
+
+```typescript
+const API_BASE = "https://jottar.vercel.com";
+
+type ApiOk<T> = { ok: true } & T;
+type ApiErr = { ok: false; error: string };
+type ApiResponse<T> = ApiOk<T> | ApiErr;
+
+async function api<T>(
+  path: string,
+  init?: RequestInit,
+): Promise<ApiResponse<T>> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...(init?.headers ?? {}),
+    },
+  });
+
+  return res.json();
+}
+```
+
+### Usage Example
+
+```typescript
+// Get current user
+const me = await api<{ data: { id: string; email?: string } }>("/api/me");
+
+if (!me.ok) {
+  console.error("API error:", me.error);
+} else {
+  console.log("User:", me.data);
+}
+
+// Create a note
+const note = await api<{ data: unknown }>("/api/notes", {
+  method: "POST",
+  body: JSON.stringify({ content: "My note content" }),
+});
+```
+
+<Info>
+For React Native applications, you'll need to explicitly pass authentication headers instead of relying on cookies. See the [Authentication](/api/authentication) page for details.
+</Info>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="key" href="/api/authentication">
+    Learn how to authenticate your requests
+  </Card>
+  
+  <Card title="Notes API" icon="note" href="/api/endpoints/notes">
+    Start working with notes
+  </Card>
+  
+  <Card title="Folders API" icon="folder" href="/api/endpoints/folders">
+    Organize notes with folders
+  </Card>
+  
+  <Card title="React Native" icon="mobile" href="/api/react-native/setup">
+    Set up mobile integration
+  </Card>
+</CardGroup>

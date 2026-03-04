@@ -1,0 +1,182 @@
+---
+title: "React Native Setup"
+description: "Configure your React Native app to use Jottar API with authentication and TypeScript"
+---
+
+## Overview
+
+Jottar provides a simple REST API that works seamlessly with React Native. This guide walks you through setting up authentication, configuring the API client, and handling requests from your mobile app.
+
+## Prerequisites
+
+- React Native project set up
+- Access to Jottar API (default: `https://jottar.vercel.com`)
+- Better Auth configured for mobile origins
+
+## Setup Steps
+
+<Steps>
+  <Step title="Create the API Helper">
+    Create a TypeScript helper function to handle all API requests. This helper manages the base URL, headers, and response typing.
+
+    ```typescript
+    const API_BASE = "https://jottar.vercel.com";
+
+    type ApiOk<T> = { ok: true } & T;
+    type ApiErr = { ok: false; error: string };
+    type ApiResponse<T> = ApiOk<T> | ApiErr;
+
+    async function api<T>(
+      path: string,
+      init?: RequestInit,
+    ): Promise<ApiResponse<T>> {
+      const res = await fetch(`${API_BASE}${path}`, {
+        ...init,
+        headers: {
+          "Content-Type": "application/json",
+          ...(init?.headers ?? {}),
+        },
+        // Keep/forward auth material here (cookie header, bearer token, etc.)
+        // credentials: "include" is browser-only; RN usually uses explicit headers.
+      });
+
+      return res.json();
+    }
+    ```
+
+    <Note>
+      Unlike browser environments, React Native doesn't support `credentials: "include"` for cookies. You'll need to handle authentication tokens explicitly in headers.
+    </Note>
+  </Step>
+
+  <Step title="Configure API Base URL">
+    Update the `API_BASE` constant to point to your Jottar instance:
+
+    <CodeGroup>
+      ```typescript Production
+      const API_BASE = "https://jottar.vercel.com";
+      ```
+
+      ```typescript Local Development
+      const API_BASE = "http://10.0.2.2:3000"; // Android emulator
+      // or
+      const API_BASE = "http://localhost:3000"; // iOS simulator
+      ```
+
+      ```typescript Custom Domain
+      const API_BASE = "https://your-domain.com";
+      ```
+    </CodeGroup>
+  </Step>
+
+  <Step title="Configure Trusted Origins in Better Auth">
+    On your Jottar server, configure Better Auth to trust your React Native app's origins. Update your `auth.ts` configuration:
+
+    ```typescript
+    export const auth = betterAuth({
+      // ... other config
+      
+      trustedOrigins: [
+        "jottar://",           // Basic scheme
+        "jottar://*",          // Wildcard support for all paths
+        "exp://",              // Trust all Expo URLs (prefix matching)
+        "exp://**",            // Trust all Expo URLs (wildcard matching)
+        "exp://10.198.*.*:*/**", // Trust 10.198.x.x IP range with any port
+      ],
+    });
+    ```
+
+    <Note>
+      The `trustedOrigins` configuration is essential for Better Auth to accept requests from your mobile app. Adjust the patterns to match your app's URL scheme.
+    </Note>
+  </Step>
+
+  <Step title="Add Authentication Headers">
+    Modify the API helper to include authentication tokens:
+
+    ```typescript
+    async function api<T>(
+      path: string,
+      init?: RequestInit,
+    ): Promise<ApiResponse<T>> {
+      // Get your auth token from secure storage
+      const token = await getAuthToken();
+
+      const res = await fetch(`${API_BASE}${path}`, {
+        ...init,
+        headers: {
+          "Content-Type": "application/json",
+          ...(token && { Authorization: `Bearer ${token}` }),
+          ...(init?.headers ?? {}),
+        },
+      });
+
+      return res.json();
+    }
+    ```
+  </Step>
+
+  <Step title="Test the Connection">
+    Verify your setup by fetching the current user identity:
+
+    ```typescript
+    const me = await api<{ data: { id: string; email?: string } }>("/api/me");
+    
+    if (!me.ok) {
+      console.error("Authentication failed:", me.error);
+    } else {
+      console.log("Logged in as:", me.data.email);
+    }
+    ```
+  </Step>
+</Steps>
+
+## TypeScript Types
+
+The API helper uses discriminated unions for type-safe error handling:
+
+```typescript
+type ApiOk<T> = { ok: true } & T;
+type ApiErr = { ok: false; error: string };
+type ApiResponse<T> = ApiOk<T> | ApiErr;
+```
+
+This allows TypeScript to narrow the response type based on the `ok` field:
+
+```typescript
+const response = await api<{ data: Note[] }>("/api/notes");
+
+if (response.ok) {
+  // TypeScript knows response.data exists here
+  console.log(response.data);
+} else {
+  // TypeScript knows response.error exists here
+  console.error(response.error);
+}
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Secure Token Storage" icon="lock">
+    Store authentication tokens in secure storage (e.g., `expo-secure-store` or `react-native-keychain`)
+  </Card>
+  
+  <Card title="Error Handling" icon="triangle-exclamation">
+    Always check the `ok` field before accessing response data
+  </Card>
+  
+  <Card title="Network Timeouts" icon="clock">
+    Configure appropriate timeout values for mobile network conditions
+  </Card>
+  
+  <Card title="Offline Support" icon="wifi-slash">
+    Implement retry logic and offline queuing for better UX
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<Card title="View Examples" icon="code" href="/api/react-native/examples">
+  See complete examples for all Jottar API endpoints
+</Card>

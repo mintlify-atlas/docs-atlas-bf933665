@@ -1,0 +1,100 @@
+---
+title: 'Me'
+description: 'Get authenticated user information'
+---
+
+## Get Current User
+
+<Note>
+Requires authentication via Better Auth session (cookie or header).
+</Note>
+
+<CodeGroup>
+```bash curl
+curl -X GET https://jottar.vercel.com/api/me \
+  -H "Cookie: better-auth.session_token=your-session-token"
+```
+
+```typescript TypeScript
+const me = await api<{ data: { id: string; email?: string } }>("/api/me");
+
+if (me.ok) {
+  console.log("User:", me.data);
+}
+```
+</CodeGroup>
+
+### Response
+
+Returns the authenticated user object.
+
+<ResponseField name="ok" type="boolean" required>
+  Success indicator (always `true` for successful responses)
+</ResponseField>
+
+<ResponseField name="data" type="object" required>
+  The user object
+  
+  <Expandable title="User properties">
+    <ResponseField name="id" type="string" required>
+      User unique identifier (UUID)
+    </ResponseField>
+    
+    <ResponseField name="email" type="string">
+      User email address
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      User display name
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="string">
+      Account creation timestamp (ISO 8601)
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example Response
+
+<Tabs>
+  <Tab title="Success">
+    ```json
+    {
+      "ok": true,
+      "data": {
+        "id": "550e8400-e29b-41d4-a716-446655440000",
+        "email": "user@example.com",
+        "name": "John Doe",
+        "createdAt": "2024-01-15T10:30:00.000Z"
+      }
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Unauthenticated">
+    ```json
+    {
+      "ok": false,
+      "error": "Not authenticated"
+    }
+    ```
+    
+    **Status Code:** `401 Unauthorized`
+  </Tab>
+</Tabs>
+
+## Error Handling
+
+<ResponseField name="ok" type="boolean">
+  `false` when request fails
+</ResponseField>
+
+<ResponseField name="error" type="string">
+  Error message describing what went wrong
+</ResponseField>
+
+### Common Errors
+
+| Status Code | Error Message | Description |
+|------------|---------------|-------------|
+| 401 | Not authenticated | No valid session found |

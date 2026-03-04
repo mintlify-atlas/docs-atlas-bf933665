@@ -1,0 +1,654 @@
+---
+title: Mobile App Integration
+description: Access Jottar from React Native using the REST API
+---
+
+## Overview
+
+Jottar is designed to work seamlessly with React Native mobile apps through its REST API. This guide covers authentication, API usage, common workflows, and best practices for building a mobile client.
+
+## Prerequisites
+
+Before integrating Jottar with React Native:
+
+<Steps>
+  <Step title="Understand the REST API">
+    Jottar exposes a full REST API under `/api/*` for managing notes, folders, tags, and user data.
+  </Step>
+
+  <Step title="Review the API types">
+    Jottar provides a comprehensive TypeScript type reference in `API_TYPES_FOR_RN.md` that you can copy directly into your React Native project.
+  </Step>
+
+  <Step title="Set up authentication">
+    Jottar uses Better Auth for authentication. You'll need to handle session tokens in your mobile app.
+  </Step>
+
+  <Step title="Configure trusted origins">
+    Ensure your mobile app's origin is added to the trusted origins list in the Better Auth configuration.
+  </Step>
+</Steps>
+
+## API Authentication from Mobile
+
+### Better Auth Overview
+
+Jottar uses **Better Auth** for authentication:
+
+- All API requests require authentication
+- Authentication is handled via session tokens
+- Tokens are passed in cookies or headers
+- The session is validated on every API request
+
+### Authentication Flow
+
+<Steps>
+  <Step title="User signs in">
+    The user signs in through the Better Auth flow (email/password, OAuth, etc.).
+  </Step>
+
+  <Step title="Receive session token">
+    Better Auth returns a session token that identifies the user.
+  </Step>
+
+  <Step title="Store token securely">
+    Store the session token securely in React Native using:
+    - `@react-native-async-storage/async-storage` for persistence
+    - Expo SecureStore for sensitive data
+    - Keychain/Keystore for maximum security
+  </Step>
+
+  <Step title="Include token in requests">
+    Include the session token in every API request via the `Authorization` header or cookies.
+  </Step>
+</Steps>
+
+**Implementation Example:**
+
+```tsx
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// Store session token after login
+await AsyncStorage.setItem('sessionToken', token);
+
+// Retrieve token for API calls
+const token = await AsyncStorage.getItem('sessionToken');
+
+// Make authenticated request
+const response = await fetch('https://your-jottar-instance.com/api/notes', {
+  method: 'GET',
+  headers: {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  }
+});
+```
+
+### Authentication Utility
+
+Every API route uses `getRequestUser()` to validate the session:
+
+```tsx
+// From ~/workspace/source/src/app/api/_utils.ts
+export async function getRequestUser(req: Request) {
+  const session = await auth.api.getSession({ headers: req.headers });
+  if (!session?.user) return null;
+  return session.user;
+}
+```
+
+<Warning>
+  All API requests return a 401 error if the session is invalid or missing. Make sure to handle authentication errors gracefully in your mobile app.
+</Warning>
+
+## API Types for React Native
+
+Jottar provides a complete type reference in **`API_TYPES_FOR_RN.md`**:
+
+```tsx
+// Core types
+export type ApiNote = {
+  id: string;
+  title: string | null;
+  content: string;
+  folderId: string | null;
+  userId: string;
+  isPinned: boolean;
+  favorite: boolean;
+  archived: boolean;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+  noteTags: ApiNoteTag[];
+  trashedAt: string | Date | null;
+  allowCopy: boolean;
+  copiedFromNoteId: string | null;
+  copiedFromUserId: string | null;
+  shareLinkType: "USERNAME" | "TOKEN";
+  shareable: boolean;
+};
+
+export type ApiFolder = {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+  _count: { notes: number };
+};
+
+export type ApiTag = {
+  id: string;
+  name: string;
+  userId: string;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+  noteTags: Array<{ noteId: string; tagId: string }>;
+};
+```
+
+<Tip>
+  Copy the entire `API_TYPES_FOR_RN.md` file into your React Native project and import these types for full type safety.
+</Tip>
+
+## Common Mobile Workflows
+
+### Fetching Notes
+
+**Get all notes:**
+
+```tsx
+import { ApiResponse, GetNotesResponse } from './api-types';
+
+async function fetchNotes(): Promise<GetNotesResponse> {
+  const token = await AsyncStorage.getItem('sessionToken');
+  
+  const response = await fetch('https://your-jottar-instance.com/api/notes', {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    }
+  });
+
+  return response.json();
+}
+```
+
+**Get a single note:**
+
+```tsx
+async function fetchNote(id: string): Promise<GetNoteResponse> {
+  const token = await AsyncStorage.getItem('sessionToken');
+  
+  const response = await fetch(
+    `https://your-jottar-instance.com/api/notes?mode=one&id=${id}`,
+    {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    }
+  );
+
+  return response.json();
+}
+```
+
+**Get notes overview (recent + pinned):**
+
+```tsx
+async function fetchNotesOverview(): Promise<GetNotesOverviewResponse> {
+  const token = await AsyncStorage.getItem('sessionToken');
+  
+  const response = await fetch(
+    'https://your-jottar-instance.com/api/notes?mode=overview',
+    {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    }
+  );
+
+  return response.json();
+}
+```
+
+### Creating Notes
+
+```tsx
+import { CreateNoteResponse } from './api-types';
+
+async function createNote(content: string): Promise<CreateNoteResponse> {
+  const token = await AsyncStorage.getItem('sessionToken');
+  
+  const response = await fetch('https://your-jottar-instance.com/api/notes', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ content })
+  });
+
+  return response.json();
+}
+```
+
+### Updating Notes
+
+**Update content:**
+
+```tsx
+async function updateNoteContent(
+  id: string, 
+  content: string
+): Promise<UpdateNoteContentResponse> {
+  const token = await AsyncStorage.getItem('sessionToken');
+  
+  const response = await fetch(
+    `https://your-jottar-instance.com/api/notes/${id}`,
+    {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ content })
+    }
+  );
+
+  return response.json();
+}
+```
+
+**Update title or folder:**
+
+```tsx
+async function updateNoteDetails(
+  id: string,
+  title?: string,
+  folderId?: string | null
+): Promise<UpdateNoteDetailsResponse> {
+  const token = await AsyncStorage.getItem('sessionToken');
+  
+  const response = await fetch(
+    `https://your-jottar-instance.com/api/notes/${id}`,
+    {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ title, folderId })
+    }
+  );
+
+  return response.json();
+}
+```
+
+<Note>
+  You cannot update content and title/folder in the same PATCH request. Send separate requests for content vs. metadata.
+</Note>
+
+### Toggle Actions
+
+**Pin/unpin a note:**
+
+```tsx
+async function togglePin(id: string): Promise<TogglePinResponse> {
+  const token = await AsyncStorage.getItem('sessionToken');
+  
+  const response = await fetch(
+    `https://your-jottar-instance.com/api/notes/${id}/toggle-pin`,
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    }
+  );
+
+  return response.json();
+}
+```
+
+**Favorite/unfavorite a note:**
+
+```tsx
+async function toggleFavorite(id: string): Promise<ToggleFavoriteResponse> {
+  const token = await AsyncStorage.getItem('sessionToken');
+  
+  const response = await fetch(
+    `https://your-jottar-instance.com/api/notes/${id}/toggle-favorite`,
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    }
+  );
+
+  return response.json();
+}
+```
+
+**Archive/unarchive a note:**
+
+```tsx
+async function toggleArchive(id: string): Promise<ToggleArchiveResponse> {
+  const token = await AsyncStorage.getItem('sessionToken');
+  
+  const response = await fetch(
+    `https://your-jottar-instance.com/api/notes/${id}/toggle-archive`,
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    }
+  );
+
+  return response.json();
+}
+```
+
+### Folders
+
+**Get all folders:**
+
+```tsx
+async function fetchFolders(): Promise<GetFoldersResponse> {
+  const token = await AsyncStorage.getItem('sessionToken');
+  
+  const response = await fetch(
+    'https://your-jottar-instance.com/api/folders',
+    {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    }
+  );
+
+  return response.json();
+}
+```
+
+**Create a folder:**
+
+```tsx
+async function createFolder(
+  name: string,
+  slug: string,
+  description?: string
+): Promise<CreateFolderResponse> {
+  const token = await AsyncStorage.getItem('sessionToken');
+  
+  const response = await fetch(
+    'https://your-jottar-instance.com/api/folders',
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ name, slug, description })
+    }
+  );
+
+  return response.json();
+}
+```
+
+### Tags
+
+**Get all tags:**
+
+```tsx
+async function fetchTags(): Promise<GetTagsResponse> {
+  const token = await AsyncStorage.getItem('sessionToken');
+  
+  const response = await fetch(
+    'https://your-jottar-instance.com/api/tags',
+    {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    }
+  );
+
+  return response.json();
+}
+```
+
+**Create a tag:**
+
+```tsx
+async function createTag(name: string): Promise<CreateTagResponse> {
+  const token = await AsyncStorage.getItem('sessionToken');
+  
+  const response = await fetch(
+    'https://your-jottar-instance.com/api/tags',
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ name })
+    }
+  );
+
+  return response.json();
+}
+```
+
+## Trusted Origins Configuration
+
+### Why Trusted Origins Matter
+
+Better Auth validates the origin of API requests to prevent CSRF attacks. You need to add your mobile app's origin to the trusted origins list.
+
+### Mobile App Origins
+
+For React Native apps, the origin depends on your setup:
+
+- **Expo Go:** `exp://` or `http://localhost:19000`
+- **Custom native app:** Your app's bundle identifier (e.g., `com.yourcompany.jottar`)
+- **Web view:** The domain of your embedded web content
+
+### Configuring Better Auth
+
+Add your mobile app's origin to the Better Auth configuration:
+
+```tsx
+// In your Better Auth setup
+import { betterAuth } from "better-auth";
+
+export const auth = betterAuth({
+  // ...
+  trustedOrigins: [
+    "https://your-jottar-instance.com",
+    "exp://",                          // Expo Go
+    "http://localhost:19000",          // Expo dev server
+    "com.yourcompany.jottar"           // Native app
+  ]
+});
+```
+
+<Warning>
+  If your mobile app's origin is not in the trusted origins list, API requests will be rejected with a CORS error.
+</Warning>
+
+## Handling Tiptap Content in Mobile
+
+### Content Format
+
+Jottar stores note content as **JSON** from the Tiptap editor:
+
+```json
+{
+  "type": "doc",
+  "content": [
+    {
+      "type": "heading",
+      "attrs": { "level": 1 },
+      "content": [
+        { "type": "text", "text": "My Note Title" }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        { "type": "text", "text": "This is a paragraph." }
+      ]
+    }
+  ]
+}
+```
+
+### Rendering Options
+
+**Option 1: Use Tiptap in React Native**
+
+If you want full rich-text editing in your mobile app, use a React Native Tiptap wrapper like:
+
+- `@tiptap/react` (if using React Native Web)
+- A custom WebView-based editor
+
+**Option 2: Render as plain text**
+
+For simpler read-only views, extract plain text from the JSON:
+
+```tsx
+function extractTextFromDoc(doc: any): string {
+  if (!doc?.content) return "";
+
+  let text = "";
+
+  const walk = (node: any) => {
+    if (node.type === "text") {
+      text += node.text + " ";
+    }
+    if (node.content) {
+      node.content.forEach(walk);
+    }
+  };
+
+  doc.content.forEach(walk);
+  return text.trim();
+}
+```
+
+**Option 3: Render as Markdown**
+
+Convert the Tiptap JSON to Markdown for display:
+
+- Use a library like `tiptap-markdown` to convert JSON to Markdown
+- Render Markdown in React Native using `react-native-markdown-display`
+
+<Tip>
+  For the best mobile experience, consider using a lightweight plain-text editor and storing notes as plain text or Markdown. This avoids the complexity of managing Tiptap JSON in React Native.
+</Tip>
+
+## Error Handling
+
+### API Error Format
+
+All API errors follow a consistent format:
+
+```json
+{
+  "ok": false,
+  "error": "Error message here"
+}
+```
+
+### Common Errors
+
+| Status Code | Error | Cause |
+|-------------|-------|-------|
+| 401 | Not authenticated | Missing or invalid session token |
+| 404 | Not found | Note, folder, or tag doesn't exist or doesn't belong to user |
+| 400 | Invalid request | Missing required fields or invalid JSON |
+| 500 | Server error | Unexpected server-side error |
+
+### Error Handling Example
+
+```tsx
+async function safeApiCall<T>(fn: () => Promise<T>): Promise<T | null> {
+  try {
+    const response = await fn();
+    if ('ok' in response && !response.ok) {
+      console.error('API error:', response.error);
+      // Show error toast to user
+      return null;
+    }
+    return response;
+  } catch (error) {
+    console.error('Network error:', error);
+    // Show network error toast to user
+    return null;
+  }
+}
+
+// Usage
+const notes = await safeApiCall(() => fetchNotes());
+if (!notes) {
+  // Handle error
+  return;
+}
+```
+
+## Best Practices
+
+<Steps>
+  <Step title="Cache data locally">
+    Store fetched notes, folders, and tags in local state or a database like SQLite for offline access.
+  </Step>
+
+  <Step title="Implement optimistic updates">
+    Update the UI immediately and rollback if the API call fails (same pattern as the web app).
+  </Step>
+
+  <Step title="Handle token expiration">
+    Check for 401 errors and prompt the user to re-authenticate if their session expires.
+  </Step>
+
+  <Step title="Use pagination for large lists">
+    While the API doesn't currently support pagination, consider implementing client-side pagination for performance.
+  </Step>
+
+  <Step title="Debounce content updates">
+    When the user is typing, debounce API calls to avoid excessive requests.
+  </Step>
+
+  <Step title="Sync in the background">
+    Use background tasks to sync notes, folders, and tags periodically.
+  </Step>
+</Steps>
+
+## Complete API Reference
+
+For a complete list of all available endpoints, request bodies, and response types, refer to:
+
+- **`API_TYPES_FOR_RN.md`** in the source code
+- The [API Reference](/api/overview) section of this documentation
+
+## Related Resources
+
+- [Creating Notes](/guides/creating-notes) – Learn about the note creation flow
+- [Organizing Notes](/guides/organizing-notes) – Understand folders, tags, and status flags
+- [Searching](/guides/searching) – Implement search and filtering in your mobile app
+- [Sharing](/guides/sharing) – Integrate note duplication and sharing features

@@ -1,0 +1,559 @@
+---
+title: Organizing Notes
+description: Master folders, tags, pinning, favorites, archiving, and trash management in Jottar
+---
+
+## Overview
+
+Jottar provides multiple organizational strategies to keep your notes structured and accessible. You can use folders for hierarchical organization, tags for cross-cutting themes, and status flags (pinned, favorites, archived) to highlight important notes.
+
+## Folders
+
+### What Are Folders?
+
+Folders in Jottar provide a hierarchical way to organize notes into collections:
+
+- Each folder has a **name** (max 50 characters), **slug** (max 80 characters), and optional **description** (max 255 characters)
+- Folders are user-specific – you can't share folders with other users
+- Notes can belong to **one folder** or **no folder** (stored at the root level)
+- Moving a note between folders is instant via the context menu
+
+### Database Schema
+
+```prisma
+// From ~/workspace/source/prisma/schema.prisma
+model Folder {
+  id          String   @id @default(uuid())
+  name        String   @db.VarChar(50)
+  userId      String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  description String?  @db.VarChar(255)
+  slug        String   @db.VarChar(80)
+  user        User     @relation(...)
+  notes       Note[]
+
+  @@unique([userId, name])
+  @@unique([userId, slug])
+}
+```
+
+### Creating Folders
+
+Folders can be created:
+
+1. **From the folder management page** – Navigate to `/folders/new`
+2. **From the note context menu** – Right-click a note, select "Move to folder" > "New folder"
+
+**API Endpoint:** `POST /api/folders`
+
+```json
+{
+  "name": "Work Notes",
+  "slug": "work-notes",
+  "description": "Notes related to work projects"
+}
+```
+
+### Moving Notes to Folders
+
+You can move notes between folders using the **context menu** (right-click on a note card):
+
+<Steps>
+  <Step title="Open the context menu">
+    Right-click on any note card to open the context menu.
+  </Step>
+
+  <Step title="Select 'Move to folder'">
+    Hover over "Move to folder" to see a submenu with all available folders.
+  </Step>
+
+  <Step title="Choose a folder or 'None'">
+    Select a folder to move the note, or select "None" to move it back to the root level.
+  </Step>
+
+  <Step title="Optimistic update">
+    The note immediately updates in the UI. If the server request fails, the change is rolled back.
+  </Step>
+</Steps>
+
+**Behind the scenes:**
+
+```tsx
+// From ~/workspace/source/src/components/notes/note-card.tsx
+const handleFolderChange = async (newFolderId: string) => {
+  const targetId = newFolderId === "none" ? null : newFolderId;
+  const prevFolderId = localNote.folderId;
+
+  // Optimistic update
+  setLocalNote((s) => ({ ...s, folderId: targetId }));
+
+  const res = await updateNoteFolder(localNote.id, targetId);
+
+  if (res?.error) {
+    // Rollback on error
+    setLocalNote((s) => ({ ...s, folderId: prevFolderId }));
+    toast.error(res.error);
+  }
+};
+```
+
+**API Endpoint:** `PATCH /api/notes/{id}/folder`
+
+```json
+{
+  "folderId": "uuid" // or null
+}
+```
+
+### Folder Strategies
+
+<Tip>
+  **Project-based folders:** Create folders for each project or area of responsibility (e.g., "Marketing Campaign", "Product Roadmap", "Personal").
+</Tip>
+
+<Tip>
+  **Topic-based folders:** Organize notes by subject matter (e.g., "Development", "Design", "Business Strategy").
+</Tip>
+
+<Tip>
+  **Time-based folders:** Create folders for specific time periods (e.g., "2024 Q1", "January Meeting Notes").
+</Tip>
+
+## Tags
+
+### What Are Tags?
+
+Tags provide a flexible, non-hierarchical way to categorize notes:
+
+- Each tag has a **name** (max 100 characters)
+- Tags are user-specific
+- Notes can have **multiple tags** (many-to-many relationship)
+- Tags are useful for cross-cutting themes that span multiple folders
+
+### Database Schema
+
+```prisma
+// From ~/workspace/source/prisma/schema.prisma
+model Tag {
+  id        String    @id @default(uuid())
+  name      String    @db.VarChar(100)
+  userId    String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  noteTags  NoteTag[]
+  user      User      @relation(...)
+
+  @@unique([userId, name])
+}
+
+model NoteTag {
+  id        String   @id @default(uuid())
+  noteId    String
+  tagId     String
+  createdAt DateTime @default(now())
+  note      Note     @relation(...)
+  tag       Tag      @relation(...)
+
+  @@unique([noteId, tagId])
+}
+```
+
+### Creating Tags
+
+**API Endpoint:** `POST /api/tags`
+
+```json
+{
+  "name": "urgent"
+}
+```
+
+**Response:**
+```json
+{
+  "ok": true,
+  "data": {
+    "id": "uuid",
+    "name": "urgent",
+    "userId": "uuid",
+    "createdAt": "2024-01-01T00:00:00.000Z",
+    "updatedAt": "2024-01-01T00:00:00.000Z"
+  }
+}
+```
+
+### Tagging Notes
+
+Tags can be added to notes through the **Note Details** dialog:
+
+1. Right-click a note and select "Details"
+2. In the details dialog, manage tags associated with the note
+3. Tags are stored in the `NoteTag` join table
+
+### Tag Strategies
+
+<Tip>
+  **Status tags:** Use tags like "in-progress", "done", "blocked" to track note status.
+</Tip>
+
+<Tip>
+  **Priority tags:** Add tags like "urgent", "high-priority", "low-priority" to filter by importance.
+</Tip>
+
+<Tip>
+  **Theme tags:** Use tags like "research", "meeting-notes", "ideas" to categorize by type.
+</Tip>
+
+## Combining Folders and Tags
+
+The most powerful organizational strategy is to **combine folders and tags**:
+
+- Use **folders** for high-level structure (projects, areas)
+- Use **tags** for cross-cutting attributes (priority, status, themes)
+
+### Example Workflow
+
+<Steps>
+  <Step title="Create folders for projects">
+    Create folders like "Website Redesign", "Mobile App", "Marketing".
+  </Step>
+
+  <Step title="Create tags for attributes">
+    Create tags like "urgent", "in-progress", "waiting-on-review", "idea".
+  </Step>
+
+  <Step title="Organize notes">
+    Place notes in folders based on project, then tag them based on status or priority.
+  </Step>
+
+  <Step title="Filter and search">
+    Use folder navigation to narrow by project, then filter by tags to find specific notes.
+  </Step>
+</Steps>
+
+## Pinning Important Notes
+
+### What Is Pinning?
+
+Pinning allows you to **highlight important notes** at the top of your note list:
+
+- Pinned notes appear **first** in the active notes view
+- Only applicable to **active (non-archived, non-trashed) notes**
+- Useful for quick access to frequently referenced notes
+
+### How to Pin a Note
+
+<Steps>
+  <Step title="Open the context menu">
+    Right-click on a note card in the active notes view.
+  </Step>
+
+  <Step title="Select 'Pin note'">
+    Click "Pin note" to pin the note to the top of the list.
+  </Step>
+
+  <Step title="Note moves to top">
+    The note immediately moves to the top of the list with a pin icon.
+  </Step>
+</Steps>
+
+**Behind the scenes:**
+
+```tsx
+// Optimistic toggle with server action
+const optimisticToggle = async (key, actionFn) => {
+  // Flip locally
+  setLocalNote((s) => ({ ...s, [key]: !s[key] }));
+
+  const res = await actionFn(id);
+
+  if (res?.error) {
+    // Rollback on error
+    setLocalNote(prev);
+    toast.error(res.error);
+  }
+};
+```
+
+**API Endpoint:** `POST /api/notes/{id}/toggle-pin`
+
+**Database Update:**
+```sql
+UPDATE "note"
+SET "isPinned" = NOT "isPinned", "updatedAt" = NOW()
+WHERE id = $1 AND "userId" = $2
+RETURNING *;
+```
+
+<Note>
+  Pinning is purely visual – it doesn't affect the note's content, folder, or tags.
+</Note>
+
+## Using Favorites
+
+### What Are Favorites?
+
+Favorites allow you to mark notes you want to access quickly:
+
+- Favorited notes can be viewed in the **Favorites** page (`/favorites`)
+- Notes can be favorited from any view (active, folder, archive)
+- The favorite status is independent of pinning and archiving
+
+### How to Favorite a Note
+
+<Steps>
+  <Step title="Open the context menu">
+    Right-click on any note card.
+  </Step>
+
+  <Step title="Select 'Add to favorites'">
+    Click "Add to favorites" to mark the note as a favorite.
+  </Step>
+
+  <Step title="Star icon appears">
+    A star icon appears on the note card to indicate favorite status.
+  </Step>
+</Steps>
+
+**API Endpoint:** `POST /api/notes/{id}/toggle-favorite`
+
+**Database Update:**
+```sql
+UPDATE "note"
+SET "favorite" = NOT "favorite", "updatedAt" = NOW()
+WHERE id = $1 AND "userId" = $2
+RETURNING *;
+```
+
+### Viewing Favorites
+
+Navigate to `/favorites` to see all your favorited notes in one place:
+
+- Notes from all folders appear here if they're marked as favorites
+- Archived and trashed notes are excluded from the favorites view
+- The favorites page uses the same note card layout as other views
+
+## Archiving Old Notes
+
+### What Is Archiving?
+
+Archiving lets you **hide notes you don't need regularly** without deleting them:
+
+- Archived notes are hidden from the main notes view
+- Archived notes can be viewed on the **Archive** page (`/archive`)
+- Archiving is reversible – you can unarchive a note anytime
+
+### How to Archive a Note
+
+<Steps>
+  <Step title="Open the context menu">
+    Right-click on a note card.
+  </Step>
+
+  <Step title="Select 'Archive note'">
+    Click "Archive note" to move it to the archive.
+  </Step>
+
+  <Step title="Note disappears from active view">
+    The note is immediately removed from the active notes list.
+  </Step>
+
+  <Step title="Undo if needed">
+    A toast notification appears with an "Undo" button to reverse the action.
+  </Step>
+</Steps>
+
+**API Endpoint:** `POST /api/notes/{id}/toggle-archive`
+
+**Database Update:**
+```sql
+UPDATE "note"
+SET "archived" = NOT "archived", "updatedAt" = NOW()
+WHERE id = $1 AND "userId" = $2
+RETURNING *;
+```
+
+### When to Archive
+
+<Tip>
+  **Completed projects:** Archive notes from finished projects to declutter your active workspace.
+</Tip>
+
+<Tip>
+  **Reference material:** Archive notes you may need later but don't reference regularly.
+</Tip>
+
+<Tip>
+  **Seasonal content:** Archive notes that are only relevant during certain times of the year.
+</Tip>
+
+### Unarchiving Notes
+
+To restore an archived note:
+
+1. Navigate to `/archive`
+2. Right-click on the note
+3. Select "Unarchive note"
+4. The note returns to the active notes view
+
+## Trash Management
+
+### How Trash Works
+
+Jottar implements a **soft delete system** with a trash feature:
+
+- Trashed notes are not permanently deleted – they're marked with a `trashedAt` timestamp
+- Trashed notes can be **viewed** in the Trash page (`/trash`)
+- Trashed notes can be **restored** to active status
+- A **cron job** permanently deletes notes after they've been in trash for a certain period (see `/api/cron/cleanup-trashed-notes`)
+
+### Database Schema
+
+```prisma
+model Note {
+  // ...
+  trashedAt DateTime? @db.Timestamp(6)
+  // ...
+
+  @@index([trashedAt])
+}
+```
+
+### Moving Notes to Trash
+
+<Steps>
+  <Step title="Open the context menu">
+    Right-click on a note card.
+  </Step>
+
+  <Step title="Select 'Trash'">
+    Click "Trash" (shown in red text) to move the note to trash.
+  </Step>
+
+  <Step title="Confirm in dialog">
+    A confirmation dialog appears asking you to confirm the action.
+  </Step>
+
+  <Step title="Note moves to trash">
+    The note is marked with a `trashedAt` timestamp and removed from all active views.
+  </Step>
+</Steps>
+
+**API Endpoint:** `POST /api/notes/{id}/trash`
+
+**Database Update:**
+```tsx
+const data = await prisma.note.update({
+  where: { id, userId: user.id },
+  data: { trashedAt: new Date() }
+});
+```
+
+### Restoring Notes from Trash
+
+<Steps>
+  <Step title="Navigate to Trash">
+    Go to `/trash` to view all trashed notes.
+  </Step>
+
+  <Step title="Open the context menu">
+    Right-click on a trashed note.
+  </Step>
+
+  <Step title="Select 'Restore from trash'">
+    Click "Restore from trash" to bring the note back to active status.
+  </Step>
+
+  <Step title="Note returns to active view">
+    The `trashedAt` field is set to `null` and the note reappears in the appropriate views (folder, favorites, etc.).
+  </Step>
+</Steps>
+
+**API Endpoint:** `POST /api/notes/{id}/restore`
+
+**Database Update:**
+```tsx
+const updatedNote = await prisma.note.update({
+  where: { id, userId: user.id },
+  data: { trashedAt: null }
+});
+```
+
+### Permanent Deletion
+
+<Warning>
+  Permanent deletion is not yet fully implemented in the UI. The backend includes a cleanup cron job at `/api/cron/cleanup-trashed-notes` that can be configured to permanently delete notes after a retention period.
+</Warning>
+
+## Practical Workflows
+
+### Daily Note Workflow
+
+<Steps>
+  <Step title="Morning review">
+    Check your pinned notes for important reminders and tasks.
+  </Step>
+
+  <Step title="Create new notes">
+    Create notes throughout the day and assign them to appropriate folders.
+  </Step>
+
+  <Step title="Tag as you go">
+    Add tags like "urgent", "follow-up", or "idea" to notes that need action.
+  </Step>
+
+  <Step title="End-of-day cleanup">
+    Archive completed notes and pin any notes you need for tomorrow.
+  </Step>
+</Steps>
+
+### Project Management Workflow
+
+<Steps>
+  <Step title="Create a project folder">
+    Start each project by creating a dedicated folder.
+  </Step>
+
+  <Step title="Capture all project notes">
+    Add meeting notes, research, ideas, and tasks to the folder.
+  </Step>
+
+  <Step title="Use tags for status">
+    Tag notes with "in-progress", "waiting", "done" to track their state.
+  </Step>
+
+  <Step title="Pin active items">
+    Pin the current sprint notes or active tasks for quick access.
+  </Step>
+
+  <Step title="Archive on completion">
+    When the project is done, archive the entire folder for future reference.
+  </Step>
+</Steps>
+
+### Research Workflow
+
+<Steps>
+  <Step title="Create a research folder">
+    Organize all research notes in a dedicated folder.
+  </Step>
+
+  <Step title="Tag by source or theme">
+    Tag notes with sources ("academic", "blog", "video") or themes ("user-experience", "performance", "security").
+  </Step>
+
+  <Step title="Favorite key findings">
+    Mark important insights as favorites for easy reference.
+  </Step>
+
+  <Step title="Archive old research">
+    Archive outdated research while keeping recent findings active.
+  </Step>
+</Steps>
+
+## Related Resources
+
+- [Creating Notes](/guides/creating-notes) – Learn how to create and edit notes
+- [Searching](/guides/searching) – Find notes quickly using search and filters
+- [Sharing](/guides/sharing) – Understand note duplication and sharing features

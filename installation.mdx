@@ -1,0 +1,482 @@
+---
+title: Installation
+description: Deploy Jottar to production - set up your database, configure environment variables, and run the application
+---
+
+## Overview
+
+Jottar can be deployed locally for development or to production on platforms like Vercel, Railway, or any Node.js hosting service. This guide covers the complete installation process.
+
+## Prerequisites
+
+Before you begin, ensure you have:
+
+- Node.js 20+ installed
+- PostgreSQL database (local or hosted)
+- pnpm package manager (recommended)
+- Git for version control
+
+<Note>
+  While the project uses pnpm, you can also use npm or yarn. The lockfile is `pnpm-lock.yaml`.
+</Note>
+
+## Environment variables
+
+Jottar requires several environment variables for database connection and authentication.
+
+<Steps>
+  <Step title="Create environment file">
+    Create a `.env` file in your project root:
+
+    ```bash
+    touch .env
+    ```
+  </Step>
+
+  <Step title="Configure database connection">
+    Add your PostgreSQL connection strings:
+
+    ```bash
+    # Database connection
+    DATABASE_URL="postgresql://user:password@host:5432/jottar"
+    DIRECT_URL="postgresql://user:password@host:5432/jottar"
+    ```
+
+    <Accordion title="Understanding DATABASE_URL vs DIRECT_URL">
+      - **DATABASE_URL**: Used by Prisma Client for connection pooling (e.g., via PgBouncer)
+      - **DIRECT_URL**: Direct database connection for migrations and schema operations
+
+      If you're not using connection pooling, both can be the same value.
+    </Accordion>
+
+    The database configuration is defined in `prisma/schema.prisma`:
+
+    ```prisma
+    datasource db {
+      provider  = "postgresql"
+      url       = env("DATABASE_URL")
+      directUrl = env("DIRECT_URL")
+    }
+    ```
+  </Step>
+
+  <Step title="Configure Better Auth">
+    Add Better Auth configuration (optional for development):
+
+    ```bash
+    # Better Auth
+    BETTER_AUTH_SECRET="your-random-secret-key"
+    BETTER_AUTH_URL="http://localhost:3000"
+    ```
+
+    <Tip>
+      Generate a secure secret with: `openssl rand -base64 32`
+    </Tip>
+  </Step>
+
+  <Step title="Add OAuth providers (optional)">
+    To enable Google OAuth, add these variables:
+
+    ```bash
+    # Google OAuth
+    GOOGLE_CLIENT_ID="your-google-client-id.apps.googleusercontent.com"
+    GOOGLE_CLIENT_SECRET="your-google-client-secret"
+    ```
+
+    Better Auth configuration in `src/lib/auth.ts`:
+
+    ```typescript
+    export const auth = betterAuth({
+      database: prismaAdapter(prisma, {
+        provider: "postgresql",
+      }),
+
+      // Email & Password
+      emailAndPassword: { 
+        enabled: true, 
+        autoSignIn: true 
+      },
+
+      // Social providers
+      socialProviders: {
+        google: {
+          clientId: process.env.GOOGLE_CLIENT_ID!,
+          clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+        },
+      },
+
+      // Trust mobile app origins
+      trustedOrigins: [
+        "jottar://",
+        "exp://",
+        "exp://**",
+      ],
+
+      plugins: [nextCookies()],
+    });
+    ```
+
+    <Warning>
+      If you don't provide Google OAuth credentials, the social sign-in will be disabled. Email/password authentication will still work.
+    </Warning>
+  </Step>
+</Steps>
+
+## Database setup
+
+Jottar uses Prisma ORM to manage database schema and migrations.
+
+<Steps>
+  <Step title="Install dependencies">
+    ```bash
+    pnpm install
+    ```
+  </Step>
+
+  <Step title="Generate Prisma Client">
+    Generate the Prisma Client based on your schema:
+
+    ```bash
+    pnpm prisma generate
+    ```
+
+    This creates the type-safe database client at `node_modules/@prisma/client`.
+  </Step>
+
+  <Step title="Run database migrations">
+    Apply the schema to your database:
+
+    ```bash
+    pnpm prisma migrate deploy
+    ```
+
+    For development, you can use:
+
+    ```bash
+    pnpm prisma migrate dev
+    ```
+
+    This creates the following tables:
+    - `user` - User accounts
+    - `account` - OAuth provider accounts
+    - `session` - Authentication sessions
+    - `verification` - Email verification tokens
+    - `note` - User notes with rich content
+    - `folder` - Note organization folders
+    - `tag` - Note tags
+    - `note_tag` - Many-to-many join table
+  </Step>
+
+  <Step title="Seed the database (optional)">
+    If you have a seed script, run:
+
+    ```bash
+    pnpm prisma db seed
+    ```
+
+    <Note>
+      Default folders are created automatically when a user signs up via the `/api/me/default-folders` endpoint.
+    </Note>
+  </Step>
+</Steps>
+
+## Database schema overview
+
+The complete Prisma schema includes these core models:
+
+```prisma
+model User {
+  id            String    @id @default(uuid()) @db.Uuid
+  email         String?   @unique @db.VarChar(255)
+  name          String?
+  image         String?
+  emailVerified Boolean?  @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  accounts      Account[]
+  folders       Folder[]
+  notes         Note[]
+  sessions      Session[]
+  tags          Tag[]
+}
+
+model Note {
+  id               String        @id @default(uuid()) @db.Uuid
+  title            String?       @db.VarChar(255)
+  content          String
+  folderId         String?       @db.Uuid
+  userId           String        @db.Uuid
+  isPinned         Boolean       @default(false)
+  favorite         Boolean       @default(false)
+  archived         Boolean       @default(false)
+  trashedAt        DateTime?     @db.Timestamp(6)
+  shareable        Boolean       @default(false)
+  allowCopy        Boolean       @default(false)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  folder           Folder?       @relation(fields: [folderId], references: [id])
+  user             User          @relation(fields: [userId], references: [id])
+  noteTags         NoteTag[]
+  
+  @@index([userId])
+  @@index([folderId])
+  @@index([trashedAt])
+}
+
+model Folder {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @db.VarChar(50)
+  slug        String   @db.VarChar(80)
+  description String?  @db.VarChar(255)
+  userId      String   @db.Uuid
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id])
+  notes       Note[]
+  
+  @@unique([userId, name])
+  @@unique([userId, slug])
+}
+```
+
+## Running locally
+
+<Steps>
+  <Step title="Start the development server">
+    ```bash
+    pnpm dev
+    ```
+
+    The application will be available at `http://localhost:3000`.
+  </Step>
+
+  <Step title="Access the application">
+    Open your browser and navigate to:
+    - Main app: `http://localhost:3000`
+    - Sign up: `http://localhost:3000/auth/sign-up`
+    - Sign in: `http://localhost:3000/auth/sign-in`
+  </Step>
+
+  <Step title="Create your first user">
+    Use the sign-up form or make an API call:
+
+    ```typescript
+    const result = await authClient.signUp.email({
+      name: "Test User",
+      email: "test@example.com",
+      password: "password123"
+    });
+    ```
+  </Step>
+</Steps>
+
+## Production deployment
+
+### Deploy to Vercel
+
+<Steps>
+  <Step title="Install Vercel CLI">
+    ```bash
+    pnpm install -g vercel
+    ```
+  </Step>
+
+  <Step title="Configure project">
+    The project includes a `vercel.json` configuration:
+
+    ```json
+    {
+      "crons": [
+        {
+          "path": "/api/cron/cleanup-trashed-notes",
+          "schedule": "0 0 * * *"
+        }
+      ]
+    }
+    ```
+
+    This runs a daily cleanup job for trashed notes.
+  </Step>
+
+  <Step title="Set environment variables">
+    Add all environment variables in Vercel dashboard:
+    - `DATABASE_URL`
+    - `DIRECT_URL`
+    - `BETTER_AUTH_SECRET`
+    - `BETTER_AUTH_URL`
+    - `GOOGLE_CLIENT_ID` (optional)
+    - `GOOGLE_CLIENT_SECRET` (optional)
+  </Step>
+
+  <Step title="Deploy">
+    ```bash
+    vercel --prod
+    ```
+  </Step>
+</Steps>
+
+### Deploy to other platforms
+
+<Tabs>
+  <Tab title="Railway">
+    1. Create a new project on Railway
+    2. Add a PostgreSQL database
+    3. Connect your GitHub repository
+    4. Set environment variables
+    5. Railway will automatically build and deploy
+  </Tab>
+
+  <Tab title="Docker">
+    Create a `Dockerfile`:
+
+    ```dockerfile
+    FROM node:20-alpine
+
+    WORKDIR /app
+
+    COPY package.json pnpm-lock.yaml ./
+    RUN npm install -g pnpm && pnpm install
+
+    COPY . .
+
+    RUN pnpm prisma generate
+    RUN pnpm build
+
+    EXPOSE 3000
+
+    CMD ["pnpm", "start"]
+    ```
+
+    Build and run:
+
+    ```bash
+    docker build -t jottar .
+    docker run -p 3000:3000 --env-file .env jottar
+    ```
+  </Tab>
+
+  <Tab title="Self-hosted">
+    1. Clone the repository on your server
+    2. Install Node.js 20+
+    3. Set up PostgreSQL database
+    4. Configure `.env` file
+    5. Run:
+
+    ```bash
+    pnpm install
+    pnpm prisma generate
+    pnpm prisma migrate deploy
+    pnpm build
+    pnpm start
+    ```
+
+    Use a process manager like PM2:
+
+    ```bash
+    pm2 start pnpm --name jottar -- start
+    ```
+  </Tab>
+</Tabs>
+
+## Build process
+
+The build script includes Prisma generation:
+
+```json
+{
+  "scripts": {
+    "dev": "next dev",
+    "build": "prisma generate && next build",
+    "start": "next start",
+    "lint": "eslint"
+  }
+}
+```
+
+<Note>
+  Prisma Client must be generated before building the Next.js application.
+</Note>
+
+## Configuration options
+
+### Next.js configuration
+
+The `next.config.ts` file is minimal:
+
+```typescript
+import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
+  // Configuration options
+};
+
+export default nextConfig;
+```
+
+### Prisma configuration
+
+Prisma is initialized as a singleton in `src/lib/prisma.ts`:
+
+```typescript
+import { PrismaClient } from "@prisma/client";
+
+const globalForPrisma = global as unknown as {
+  prisma: PrismaClient | undefined;
+};
+
+export const prisma = globalForPrisma.prisma ?? new PrismaClient();
+
+if (process.env.NODE_ENV !== "production") {
+  globalForPrisma.prisma = prisma;
+}
+
+export default prisma;
+```
+
+This prevents multiple Prisma instances during development hot reloading.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Database connection errors">
+    - Verify `DATABASE_URL` is correct
+    - Check PostgreSQL is running
+    - Ensure database exists
+    - Verify user has correct permissions
+    - For connection pooling, check `DIRECT_URL` is set
+  </Accordion>
+
+  <Accordion title="Prisma Client not found">
+    Run `pnpm prisma generate` to generate the client:
+
+    ```bash
+    pnpm prisma generate
+    ```
+  </Accordion>
+
+  <Accordion title="Authentication not working">
+    - Check `BETTER_AUTH_SECRET` is set
+    - Verify `BETTER_AUTH_URL` matches your deployment URL
+    - For OAuth, ensure redirect URIs are configured in provider console
+    - Check cookies are enabled in browser
+  </Accordion>
+
+  <Accordion title="Build fails">
+    - Run `pnpm prisma generate` before building
+    - Check all environment variables are set
+    - Verify Node.js version is 20+
+    - Clear `.next` folder and rebuild
+  </Accordion>
+</AccordionGroup>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="API Reference" icon="book" href="/api/overview">
+    Explore all API endpoints and examples
+  </Card>
+  
+  <Card title="Core Features" icon="star" href="/features/notes">
+    Learn about notes, folders, and tags
+  </Card>
+</CardGroup>

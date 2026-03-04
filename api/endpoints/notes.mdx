@@ -1,0 +1,485 @@
+---
+title: 'Notes'
+description: 'Create, read, update, and manage notes'
+---
+
+## List Notes
+
+<CodeGroup>
+```bash curl
+curl -X GET https://jottar.vercel.com/api/notes \
+  -H "Cookie: better-auth.session_token=your-session-token"
+```
+
+```typescript TypeScript
+const notes = await api<{ data: unknown[] }>("/api/notes");
+```
+</CodeGroup>
+
+### Query Parameters
+
+<ParamField query="mode" type="string" default="list">
+  Query mode for different response formats
+  - `list` - Returns all user notes
+  - `overview` - Returns up to 3 notes (2 pinned + remaining unpinned)
+  - `one` - Returns single note (requires `id` parameter)
+</ParamField>
+
+<ParamField query="id" type="string">
+  Note UUID (required when `mode=one`)
+</ParamField>
+
+### Response
+
+<ResponseField name="ok" type="boolean" required>
+  Success indicator
+</ResponseField>
+
+<ResponseField name="data" type="object | array" required>
+  Note object (mode=one) or array of notes (mode=list/overview)
+  
+  <Expandable title="Note properties">
+    <ResponseField name="id" type="string" required>
+      Note unique identifier (UUID)
+    </ResponseField>
+    
+    <ResponseField name="title" type="string">
+      Note title (auto-generated from content if not set)
+    </ResponseField>
+    
+    <ResponseField name="content" type="string" required>
+      Note content in markdown format
+    </ResponseField>
+    
+    <ResponseField name="folderId" type="string | null">
+      Parent folder UUID or null
+    </ResponseField>
+    
+    <ResponseField name="userId" type="string" required>
+      Owner user UUID
+    </ResponseField>
+    
+    <ResponseField name="isPinned" type="boolean" required>
+      Whether note is pinned
+    </ResponseField>
+    
+    <ResponseField name="favorite" type="boolean" required>
+      Whether note is marked as favorite
+    </ResponseField>
+    
+    <ResponseField name="archived" type="boolean" required>
+      Whether note is archived
+    </ResponseField>
+    
+    <ResponseField name="trashedAt" type="string | null">
+      Soft delete timestamp (ISO 8601) or null
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="string" required>
+      Creation timestamp (ISO 8601)
+    </ResponseField>
+    
+    <ResponseField name="updatedAt" type="string" required>
+      Last update timestamp (ISO 8601)
+    </ResponseField>
+    
+    <ResponseField name="noteTags" type="array" required>
+      Associated tags array
+    </ResponseField>
+    
+    <ResponseField name="allowCopy" type="boolean">
+      Whether note can be copied by others
+    </ResponseField>
+    
+    <ResponseField name="shareable" type="boolean">
+      Whether note is shareable
+    </ResponseField>
+    
+    <ResponseField name="shareLinkType" type="string | null">
+      Share link type configuration
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+---
+
+## Create Note
+
+<CodeGroup>
+```bash curl
+curl -X POST https://jottar.vercel.com/api/notes \
+  -H "Content-Type: application/json" \
+  -H "Cookie: better-auth.session_token=your-session-token" \
+  -d '{"content": "My note body"}'
+```
+
+```typescript TypeScript
+const createNote = await api<{ data: unknown }>("/api/notes", {
+  method: "POST",
+  body: JSON.stringify({ content: "My note body" }),
+});
+```
+</CodeGroup>
+
+### Request Body
+
+<ParamField body="content" type="string" required>
+  Note content in markdown format
+</ParamField>
+
+### Response
+
+Returns the created note object.
+
+**Status Code:** `201 Created`
+
+---
+
+## Get Note by ID
+
+<CodeGroup>
+```bash curl
+curl -X GET https://jottar.vercel.com/api/notes/550e8400-e29b-41d4-a716-446655440000 \
+  -H "Cookie: better-auth.session_token=your-session-token"
+```
+
+```typescript TypeScript
+const note = await api<{ data: unknown }>("/api/notes/<note-id>");
+```
+</CodeGroup>
+
+### Response
+
+Returns single note object (same schema as List Notes).
+
+---
+
+## Update Note
+
+<Warning>
+Do not mix content updates with details updates in a single request. The API enforces separate update modes.
+</Warning>
+
+<Tabs>
+  <Tab title="Update Content">
+    <CodeGroup>
+    ```bash curl
+    curl -X PATCH https://jottar.vercel.com/api/notes/550e8400-e29b-41d4-a716-446655440000 \
+      -H "Content-Type: application/json" \
+      -H "Cookie: better-auth.session_token=your-session-token" \
+      -d '{"content": "Updated content"}'
+    ```
+    
+    ```typescript TypeScript
+    const update = await api<{ data: unknown }>("/api/notes/<note-id>", {
+      method: "PATCH",
+      body: JSON.stringify({ content: "Updated content" }),
+    });
+    ```
+    </CodeGroup>
+    
+    ### Request Body
+    
+    <ParamField body="content" type="string" required>
+      Updated note content
+    </ParamField>
+  </Tab>
+  
+  <Tab title="Update Details">
+    <CodeGroup>
+    ```bash curl
+    curl -X PATCH https://jottar.vercel.com/api/notes/550e8400-e29b-41d4-a716-446655440000 \
+      -H "Content-Type: application/json" \
+      -H "Cookie: better-auth.session_token=your-session-token" \
+      -d '{"title": "New title", "folderId": null}'
+    ```
+    
+    ```typescript TypeScript
+    const update = await api<{ data: unknown; message?: string }>(
+      "/api/notes/<note-id>",
+      {
+        method: "PATCH",
+        body: JSON.stringify({ title: "New title", folderId: null }),
+      }
+    );
+    ```
+    </CodeGroup>
+    
+    ### Request Body
+    
+    <ParamField body="title" type="string">
+      Updated note title
+    </ParamField>
+    
+    <ParamField body="folderId" type="string | null">
+      Updated folder UUID or null to remove from folder
+    </ParamField>
+    
+    <Note>
+    At least one field (title or folderId) must be provided.
+    </Note>
+  </Tab>
+</Tabs>
+
+### Response
+
+<ResponseField name="ok" type="boolean" required>
+  Success indicator
+</ResponseField>
+
+<ResponseField name="data" type="object" required>
+  Updated note object
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Success message (only for details updates)
+</ResponseField>
+
+---
+
+## Duplicate Note
+
+<CodeGroup>
+```bash curl
+curl -X POST https://jottar.vercel.com/api/notes/550e8400-e29b-41d4-a716-446655440000/duplicate \
+  -H "Cookie: better-auth.session_token=your-session-token"
+```
+
+```typescript TypeScript
+const duplicate = await api<{ data: unknown }>("/api/notes/<note-id>/duplicate", {
+  method: "POST",
+});
+```
+</CodeGroup>
+
+Duplicates a note with:
+- Copied content and folder
+- Copied tags
+- Title suffix ` (Copy)`
+- Truncated to 248 characters if needed
+
+### Response
+
+Returns the newly created note object.
+
+**Status Code:** `201 Created`
+
+---
+
+## Toggle Pin
+
+<CodeGroup>
+```bash curl
+curl -X POST https://jottar.vercel.com/api/notes/550e8400-e29b-41d4-a716-446655440000/toggle-pin \
+  -H "Cookie: better-auth.session_token=your-session-token"
+```
+
+```typescript TypeScript
+const togglePin = await api<{ data: unknown; message: string }>(
+  "/api/notes/<note-id>/toggle-pin",
+  { method: "POST" }
+);
+```
+</CodeGroup>
+
+Toggles the `isPinned` field using SQL `NOT` operator.
+
+### Response
+
+<ResponseField name="ok" type="boolean" required>
+  Success indicator
+</ResponseField>
+
+<ResponseField name="data" type="object" required>
+  Updated note object
+</ResponseField>
+
+<ResponseField name="message" type="string" required>
+  Either "Pinned" or "Unpinned"
+</ResponseField>
+
+---
+
+## Toggle Favorite
+
+<CodeGroup>
+```bash curl
+curl -X POST https://jottar.vercel.com/api/notes/550e8400-e29b-41d4-a716-446655440000/toggle-favorite \
+  -H "Cookie: better-auth.session_token=your-session-token"
+```
+
+```typescript TypeScript
+const toggleFavorite = await api<{ data: unknown; message: string }>(
+  "/api/notes/<note-id>/toggle-favorite",
+  { method: "POST" }
+);
+```
+</CodeGroup>
+
+Toggles the `favorite` field using SQL `NOT` operator.
+
+### Response
+
+<ResponseField name="message" type="string" required>
+  Either "Favorited" or "Unfavorited"
+</ResponseField>
+
+---
+
+## Toggle Archive
+
+<CodeGroup>
+```bash curl
+curl -X POST https://jottar.vercel.com/api/notes/550e8400-e29b-41d4-a716-446655440000/toggle-archive \
+  -H "Cookie: better-auth.session_token=your-session-token"
+```
+
+```typescript TypeScript
+const toggleArchive = await api<{ data: unknown; message: string }>(
+  "/api/notes/<note-id>/toggle-archive",
+  { method: "POST" }
+);
+```
+</CodeGroup>
+
+Toggles the `archived` field using SQL `NOT` operator.
+
+### Response
+
+<ResponseField name="message" type="string" required>
+  Either "Archived" or "Unarchived"
+</ResponseField>
+
+---
+
+## Move to Folder
+
+<CodeGroup>
+```bash curl
+curl -X PATCH https://jottar.vercel.com/api/notes/550e8400-e29b-41d4-a716-446655440000/folder \
+  -H "Content-Type: application/json" \
+  -H "Cookie: better-auth.session_token=your-session-token" \
+  -d '{"folderId": "550e8400-e29b-41d4-a716-446655440001"}'
+```
+
+```typescript TypeScript
+const move = await api<{ success: true }>("/api/notes/<note-id>/folder", {
+  method: "PATCH",
+  body: JSON.stringify({ folderId: "<folder-id-or-null>" }),
+});
+```
+</CodeGroup>
+
+### Request Body
+
+<ParamField body="folderId" type="string | null" required>
+  Target folder UUID or null to remove from folder
+</ParamField>
+
+### Response
+
+<ResponseField name="ok" type="boolean" required>
+  Success indicator
+</ResponseField>
+
+<ResponseField name="success" type="boolean" required>
+  `true` when folder assignment updated
+</ResponseField>
+
+### Notes
+
+- Enforces ownership on both note and folder
+- Returns 404 if folder doesn't exist or isn't owned by user
+- Only updates notes that aren't trashed
+
+---
+
+## Trash Note
+
+<CodeGroup>
+```bash curl
+curl -X POST https://jottar.vercel.com/api/notes/550e8400-e29b-41d4-a716-446655440000/trash \
+  -H "Cookie: better-auth.session_token=your-session-token"
+```
+
+```typescript TypeScript
+const trash = await api<{ data: unknown }>("/api/notes/<note-id>/trash", {
+  method: "POST",
+});
+```
+</CodeGroup>
+
+Soft-deletes a note by setting `trashedAt` timestamp.
+
+### Response
+
+Returns the updated note object with `trashedAt` set.
+
+---
+
+## Restore Note
+
+<CodeGroup>
+```bash curl
+curl -X POST https://jottar.vercel.com/api/notes/550e8400-e29b-41d4-a716-446655440000/restore \
+  -H "Cookie: better-auth.session_token=your-session-token"
+```
+
+```typescript TypeScript
+const restore = await api<{ data: unknown }>("/api/notes/<note-id>/restore", {
+  method: "POST",
+});
+```
+</CodeGroup>
+
+Restores a trashed note by setting `trashedAt` to null.
+
+### Response
+
+Returns the updated note object with `trashedAt` removed.
+
+---
+
+## Error Responses
+
+<Tabs>
+  <Tab title="Unauthenticated">
+    ```json
+    {
+      "ok": false,
+      "error": "Not authenticated"
+    }
+    ```
+    **Status Code:** `401`
+  </Tab>
+  
+  <Tab title="Not Found">
+    ```json
+    {
+      "ok": false,
+      "error": "Note not found"
+    }
+    ```
+    **Status Code:** `404`
+  </Tab>
+  
+  <Tab title="Validation Error">
+    ```json
+    {
+      "ok": false,
+      "error": "content is required"
+    }
+    ```
+    **Status Code:** `400`
+  </Tab>
+  
+  <Tab title="Mixed Update Mode">
+    ```json
+    {
+      "ok": false,
+      "error": "Provide either content updates or title/folderId updates in one request."
+    }
+    ```
+    **Status Code:** `400`
+  </Tab>
+</Tabs>

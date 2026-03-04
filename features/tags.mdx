@@ -1,0 +1,317 @@
+---
+title: Tags
+description: Tag notes for flexible organization using a many-to-many relationship
+---
+
+## Overview
+
+Tags provide a flexible way to categorize and organize notes. Unlike folders, notes can have multiple tags, enabling cross-cutting organization schemes.
+
+## Tag model
+
+Tags use a many-to-many relationship with notes through a junction table:
+
+```prisma
+model Tag {
+  id        String    @id @default(uuid()) @db.Uuid
+  name      String    @db.VarChar(100)
+  userId    String    @db.Uuid
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  noteTags  NoteTag[]
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, name])
+}
+```
+
+<Note>
+  Tag names must be unique per user. The database enforces this with a composite unique constraint on `[userId, name]`.
+</Note>
+
+## NoteTag junction table
+
+The many-to-many relationship between notes and tags is managed through the `NoteTag` model:
+
+```prisma
+model NoteTag {
+  id        String   @id @default(uuid()) @db.Uuid
+  noteId    String   @db.Uuid
+  tagId     String   @db.Uuid
+  createdAt DateTime @default(now())
+  note      Note     @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  tag       Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([noteId, tagId])
+  @@index([noteId])
+  @@index([tagId])
+}
+```
+
+### Junction table features
+
+- **Unique constraint**: A note can only be associated with each tag once
+- **Cascade deletes**: Deleting a note or tag automatically removes the junction records
+- **Indexed**: Both `noteId` and `tagId` are indexed for efficient queries
+- **Timestamps**: Tracks when the tag was assigned to the note
+
+<Tip>
+  The junction table pattern allows you to query notes by tag or tags by note efficiently without duplicating data.
+</Tip>
+
+## Creating tags
+
+Tags are created with just a name:
+
+```typescript
+// POST /api/tags
+{
+  "name": "important"
+}
+```
+
+Implementation at `/workspace/source/src/app/api/tags/route.ts:37-52`:
+
+```typescript
+export async function POST(req: Request) {
+  const user = await getRequestUser(req);
+  if (!user) return apiError("Not authenticated", 401);
+
+  const body = await parseJson<CreateTagBody>(req);
+  if (!body?.name) return apiError("name is required");
+
+  const data = await prisma.tag.create({
+    data: {
+      userId: user.id,
+      name: body.name,
+    },
+  });
+
+  return apiSuccess({ data }, 201);
+}
+```
+
+### Server action alternative
+
+You can also create tags using the server action:
+
+```typescript
+import { createTag } from "@/lib/actions/note-actions";
+
+const result = await createTag("important");
+if (result.error) {
+  console.error(result.error);
+} else {
+  console.log("Created tag:", result.data);
+}
+```
+
+<Warning>
+  Tag names must be unique per user. Creating a tag with an existing name will fail with a database constraint error.
+</Warning>
+
+## Querying tags
+
+Retrieve all tags for the authenticated user:
+
+```typescript
+// GET /api/tags
+```
+
+The response includes the tag details and associated note relationships:
+
+```typescript
+const data = await prisma.tag.findMany({
+  select: {
+    id: true,
+    name: true,
+    userId: true,
+    createdAt: true,
+    updatedAt: true,
+    noteTags: {
+      select: {
+        noteId: true,
+        tagId: true,
+      },
+    },
+  },
+  where: { userId: { equals: user.id } },
+});
+```
+
+Each tag includes:
+- Tag metadata (id, name, timestamps)
+- Array of `noteTags` showing which notes have this tag
+
+## Assigning tags to notes
+
+Tags are assigned to notes through the note duplication and note details interfaces.
+
+### During note duplication
+
+When duplicating a note, tags are automatically copied:
+
+```typescript
+// POST /api/notes/[id]/duplicate
+
+// Implementation copies tags via nested create
+const newNote = await prisma.note.create({
+  data: {
+    userId: user.id,
+    content: note.content,
+    folderId: note.folderId,
+    title: newTitle,
+    noteTags: {
+      create: note.noteTags.map((nt) => ({
+        tagId: nt.tagId,
+      })),
+    },
+  },
+});
+```
+
+### Via note details interface
+
+The note details component (located at `/workspace/source/src/components/toolbars/note-details.tsx`) provides a UI for managing note tags. The component includes:
+
+- **Combobox for tag selection**: Multi-select interface for assigning tags
+- **Tag creation**: Create new tags inline while editing note details
+- **Tag chips**: Visual display of assigned tags
+
+Form structure at `/workspace/source/src/components/toolbars/note-details.tsx:47-51`:
+
+```typescript
+type FormValues = {
+  title: string;
+  folderId: string | null;
+  tagIds: string[]; // Array of tag IDs
+};
+```
+
+<Steps>
+  <Step title="Load existing tags">
+    The component initializes with the note's current tags:
+
+    ```typescript
+    const initialTagIds = note.noteTags.map((nt) => nt.tagId);
+    ```
+  </Step>
+
+  <Step title="Select or create tags">
+    Users can select existing tags from the dropdown or create new ones inline.
+  </Step>
+
+  <Step title="Save tag assignments">
+    When saving, the component calls `updateNoteDetails` with the selected tag IDs:
+
+    ```typescript
+    const result = await updateNoteDetails(note.id, {
+      title: data.title,
+      folderId: data.folderId,
+      tagIds: data.tagIds,
+    });
+    ```
+  </Step>
+</Steps>
+
+## Tag-based organization
+
+Tags enable flexible organization patterns:
+
+### Querying notes by tag
+
+While the current API doesn't have a dedicated endpoint, you can query notes with specific tags using Prisma:
+
+```typescript
+const notesWithTag = await prisma.note.findMany({
+  where: {
+    userId: user.id,
+    noteTags: {
+      some: {
+        tagId: "specific-tag-uuid",
+      },
+    },
+  },
+  include: {
+    noteTags: {
+      include: {
+        tag: true,
+      },
+    },
+  },
+});
+```
+
+### Querying notes with multiple tags
+
+Find notes that have all of several tags (AND logic):
+
+```typescript
+const tagIds = ["tag-1-uuid", "tag-2-uuid", "tag-3-uuid"];
+
+const notesWithAllTags = await prisma.note.findMany({
+  where: {
+    userId: user.id,
+    AND: tagIds.map((tagId) => ({
+      noteTags: {
+        some: { tagId },
+      },
+    })),
+  },
+});
+```
+
+### Tag counts and analytics
+
+Count how many notes have each tag:
+
+```typescript
+const tagsWithCounts = await prisma.tag.findMany({
+  where: { userId: user.id },
+  select: {
+    id: true,
+    name: true,
+    _count: {
+      select: { noteTags: true },
+    },
+  },
+});
+```
+
+<Accordion title="Tags vs. Folders: When to use each">
+  **Use folders when:**
+  - Notes belong to a single category or project
+  - You want hierarchical organization
+  - You need URL-friendly paths (via slugs)
+
+  **Use tags when:**
+  - Notes span multiple categories
+  - You want flexible, cross-cutting organization
+  - You need to filter by multiple criteria
+  - You want to track themes or topics across projects
+
+  **Use both together:**
+  - Folders for primary organization (e.g., by project)
+  - Tags for secondary attributes (e.g., "urgent", "idea", "reference")
+</Accordion>
+
+## Tag deletion and cleanup
+
+When a tag is deleted, the cascade delete constraint automatically removes all associated `NoteTag` records:
+
+```prisma
+model NoteTag {
+  // ...
+  tag  Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  // ...
+}
+```
+
+This ensures:
+- No orphaned junction records
+- Notes remain intact (only the tag relationship is removed)
+- Efficient cleanup without additional queries
+
+<Note>
+  The same cascade behavior applies when deleting notes - all associated `NoteTag` records are automatically removed.
+</Note>

@@ -1,0 +1,295 @@
+---
+title: Folders
+description: Organize your notes into folders with names, slugs, and descriptions
+---
+
+## Overview
+
+Folders in Jottar provide a way to organize notes into collections. Each folder has a unique name and slug per user, along with an optional description.
+
+## Folder model
+
+Folders are defined in the Prisma schema with the following structure:
+
+```prisma
+model Folder {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @db.VarChar(50)
+  userId      String   @db.Uuid
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  description String?  @db.VarChar(255)
+  slug        String   @db.VarChar(80)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  notes       Note[]
+
+  @@unique([userId, name])
+  @@unique([userId, slug])
+}
+```
+
+<Note>
+  Both the folder name and slug must be unique per user. The database enforces these constraints with unique indexes.
+</Note>
+
+## Creating folders
+
+To create a folder, you need to provide a name and slug. The description is optional.
+
+```typescript
+// POST /api/folders
+{
+  "name": "My Folder",
+  "slug": "my-folder",
+  "description": "A folder for my project notes"
+}
+```
+
+### Field requirements
+
+- **name**: Required, max 50 characters
+- **slug**: Required, max 80 characters, URL-friendly identifier
+- **description**: Optional, max 255 characters
+
+Implementation at `/workspace/source/src/app/api/folders/route.ts:137-145`:
+
+```typescript
+const data = await prisma.folder.create({
+  data: {
+    name: body.name,
+    slug: body.slug,
+    description: body.description,
+    userId: user.id,
+  },
+});
+```
+
+<Tip>
+  Use a slugify library to generate URL-friendly slugs from folder names. Jottar includes the `slugify` package for this purpose.
+</Tip>
+
+## Organizing notes in folders
+
+Notes can be assigned to folders through the `folderId` field on the Note model.
+
+### Assigning a note to a folder
+
+Update the note's folder by sending a PATCH request:
+
+```typescript
+// PATCH /api/notes/[id]/folder
+{
+  "folderId": "folder-uuid-here"
+}
+```
+
+To remove a note from a folder, set `folderId` to `null`:
+
+```typescript
+// PATCH /api/notes/[id]/folder
+{
+  "folderId": null
+}
+```
+
+### Folder validation
+
+The API validates that:
+1. The folder exists
+2. The folder belongs to the authenticated user
+3. The note is not trashed (trashedAt must be null)
+
+From `/workspace/source/src/app/api/notes/[id]/folder/route.ts:27-39`:
+
+```typescript
+if (body.folderId) {
+  const folderExists = await prisma.folder.findFirst({
+    where: {
+      id: body.folderId,
+      userId: user.id,
+    },
+    select: { id: true },
+  });
+
+  if (!folderExists) {
+    return apiError("Folder not found", 404);
+  }
+}
+```
+
+<Warning>
+  You cannot move trashed notes to a different folder. The note must be restored first.
+</Warning>
+
+## Querying folders
+
+The GET `/api/folders` endpoint supports multiple query modes for different use cases.
+
+### List mode (default)
+
+Returns all folders for the user with note counts:
+
+```typescript
+// GET /api/folders
+// or
+// GET /api/folders?mode=list
+```
+
+Returns folders with:
+- Basic folder metadata (id, name, slug, description, timestamps)
+- Note count via `_count.notes`
+
+### Overview mode
+
+Returns the 3 most recently updated folders:
+
+```typescript
+// GET /api/folders?mode=overview
+```
+
+Useful for dashboard views showing recent activity. Implementation at `/workspace/source/src/app/api/folders/route.ts:79-94`:
+
+```typescript
+const data = await prisma.folder.findMany({
+  where: { userId: user.id },
+  orderBy: { updatedAt: "desc" },
+  take: 3,
+  select: {
+    id: true,
+    name: true,
+    slug: true,
+    description: true,
+    updatedAt: true,
+    _count: { select: { notes: true } },
+  },
+});
+```
+
+### Dropdown mode
+
+Returns a minimal list of folders for dropdowns/selectors:
+
+```typescript
+// GET /api/folders?mode=dropdown
+```
+
+Returns only `id` and `name` fields, ordered alphabetically by name.
+
+### Single folder query
+
+Fetch a specific folder by ID or slug, including its notes:
+
+```typescript
+// GET /api/folders?folderId=uuid
+// or
+// GET /api/folders?folderSlug=my-folder
+```
+
+Optional pagination parameters:
+- `take`: Number of notes to return
+- `skip`: Number of notes to skip
+
+The query:
+1. Finds the folder by ID or slug
+2. Includes notes that are not archived or trashed
+3. Orders notes by most recently updated
+4. Returns the folder with nested notes and note count
+
+Implementation at `/workspace/source/src/app/api/folders/route.ts:35-74`:
+
+```typescript
+const data = await prisma.folder.findFirst({
+  where: {
+    userId: user.id,
+    ...(folderId ? { id: folderId } : { slug: folderSlug }),
+  },
+  select: {
+    id: true,
+    name: true,
+    slug: true,
+    description: true,
+    createdAt: true,
+    updatedAt: true,
+    _count: { select: { notes: true } },
+    notes: {
+      where: { archived: false, trashedAt: null },
+      orderBy: { updatedAt: "desc" },
+      take,
+      skip,
+      // ... full note fields
+    },
+  },
+});
+```
+
+<Note>
+  When querying by slug, you can build clean URLs like `/folders/my-folder` instead of using UUIDs.
+</Note>
+
+## Moving notes between folders
+
+Notes can be moved between folders by updating the `folderId` field.
+
+<Steps>
+  <Step title="Update via PATCH request">
+    Use the note update endpoint:
+
+    ```typescript
+    // PATCH /api/notes/[id]
+    {
+      "folderId": "new-folder-uuid"
+    }
+    ```
+  </Step>
+
+  <Step title="Or use the dedicated folder endpoint">
+    Use the specialized folder update endpoint:
+
+    ```typescript
+    // PATCH /api/notes/[id]/folder
+    {
+      "folderId": "new-folder-uuid"
+    }
+    ```
+
+    This endpoint includes folder validation before updating.
+  </Step>
+
+  <Step title="Remove from folder">
+    Set `folderId` to `null` to remove the note from all folders:
+
+    ```typescript
+    {
+      "folderId": null
+    }
+    ```
+  </Step>
+</Steps>
+
+## Folder-note relationship
+
+The relationship between folders and notes is defined in the Prisma schema:
+
+```prisma
+model Note {
+  // ...
+  folderId  String?  @db.Uuid  // Optional foreign key
+  folder    Folder?  @relation(fields: [folderId], references: [id])
+  // ...
+  @@index([folderId])
+  @@index([userId, folderId])
+}
+
+model Folder {
+  // ...
+  notes  Note[]
+  // ...
+}
+```
+
+<Accordion title="Key characteristics">
+  - **Optional relationship**: Notes can exist without a folder (`folderId` is nullable)
+  - **Cascade delete**: When a folder is deleted, associated notes are not deleted (the foreign key doesn't have `onDelete: Cascade`)
+  - **Indexed**: The `folderId` and `[userId, folderId]` composite are indexed for fast queries
+  - **One-to-many**: Each folder can have many notes, but each note belongs to at most one folder
+</Accordion>

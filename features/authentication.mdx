@@ -1,0 +1,378 @@
+---
+title: Authentication
+description: Secure authentication with Better Auth, supporting email/password and Google OAuth
+---
+
+## Overview
+
+Jottar uses [Better Auth](https://better-auth.com) for authentication, providing a secure and flexible authentication system with support for multiple authentication methods.
+
+## Better Auth setup
+
+The auth configuration is located at `/workspace/source/src/lib/auth.ts:1-38`:
+
+```typescript
+import { betterAuth } from "better-auth";
+import { prismaAdapter } from "better-auth/adapters/prisma";
+import { nextCookies } from "better-auth/next-js";
+import prisma from "./prisma";
+
+export const auth = betterAuth({
+  ///// Setup
+  database: prismaAdapter(prisma, {
+    provider: "postgresql",
+  }),
+
+  ///// Advanced
+  advanced: { 
+    database: { 
+      generateId: () => crypto.randomUUID() 
+    } 
+  },
+
+  ///// Email & Password
+  emailAndPassword: { 
+    enabled: true, 
+    autoSignIn: true 
+  },
+
+  ///// Social providers
+  socialProviders: {
+    google: {
+      clientId: process.env.GOOGLE_CLIENT_ID!,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+    },
+  },
+
+  ///// Trust expo mobile
+  trustedOrigins: [
+    "jottar://",
+    "jottar://*",
+    "exp://",
+    "exp://**",
+    "exp://10.198.*.*:*/**",
+  ],
+
+  ///// Plugins
+  plugins: [nextCookies()],
+});
+```
+
+## Email and password authentication
+
+Better Auth provides built-in email and password authentication.
+
+### Configuration
+
+```typescript
+emailAndPassword: { 
+  enabled: true,
+  autoSignIn: true  // Automatically sign in after registration
+}
+```
+
+### User model
+
+The User model stores authentication data:
+
+```prisma
+model User {
+  id            String    @id @default(uuid()) @db.Uuid
+  email         String?   @unique @db.VarChar(255)
+  name          String?
+  image         String?
+  emailVerified Boolean?  @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  accounts      Account[]
+  sessions      Session[]
+  // ... relationships
+}
+```
+
+### Account model
+
+The Account model stores authentication provider data:
+
+```prisma
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String    @db.Uuid
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?    // Hashed password for email/password auth
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+```
+
+<Warning>
+  The `password` field stores hashed passwords. Never store or transmit plain-text passwords.
+</Warning>
+
+## Google OAuth
+
+Google OAuth is configured as a social provider.
+
+### Environment variables
+
+Set up Google OAuth credentials:
+
+```bash
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+```
+
+### Configuration
+
+```typescript
+socialProviders: {
+  google: {
+    clientId: process.env.GOOGLE_CLIENT_ID!,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+  },
+}
+```
+
+<Steps>
+  <Step title="Create Google OAuth credentials">
+    1. Go to [Google Cloud Console](https://console.cloud.google.com)
+    2. Create a new project or select existing
+    3. Enable Google+ API
+    4. Create OAuth 2.0 credentials
+    5. Add authorized redirect URIs
+  </Step>
+
+  <Step title="Configure redirect URIs">
+    Add these redirect URIs to your Google OAuth app:
+    - `http://localhost:3000/api/auth/callback/google` (development)
+    - `https://yourdomain.com/api/auth/callback/google` (production)
+  </Step>
+
+  <Step title="Add credentials to environment">
+    Add the client ID and secret to your `.env` file:
+    ```bash
+    GOOGLE_CLIENT_ID=your-actual-client-id
+    GOOGLE_CLIENT_SECRET=your-actual-client-secret
+    ```
+  </Step>
+</Steps>
+
+### OAuth flow
+
+When a user signs in with Google:
+
+1. User clicks "Sign in with Google"
+2. Redirected to Google's consent screen
+3. User grants permissions
+4. Google redirects to `/api/auth/callback/google`
+5. Better Auth creates or updates the Account record
+6. Creates User record if first time signing in
+7. Creates Session and returns authentication cookies
+
+## Session management
+
+Better Auth manages sessions using the Session model:
+
+```prisma
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String   @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+```
+
+### Session features
+
+- **Token-based**: Each session has a unique token
+- **Expiration**: Sessions expire based on the `expiresAt` timestamp
+- **Device tracking**: Stores IP address and user agent
+- **User association**: Links to the User via `userId`
+- **Indexed**: Fast lookups by `userId`
+
+### Next.js cookies plugin
+
+The `nextCookies()` plugin handles cookie management:
+
+```typescript
+plugins: [nextCookies()]
+```
+
+This plugin:
+- Sets secure, httpOnly cookies
+- Handles cookie refresh automatically
+- Works with Next.js App Router
+- Supports Server Components and Server Actions
+
+## Trusted origins for mobile
+
+Jottar includes trusted origins for Expo mobile apps:
+
+```typescript
+trustedOrigins: [
+  "jottar://",           // Basic scheme
+  "jottar://*",          // Wildcard for all paths
+  "exp://",              // Trust all Expo URLs (prefix)
+  "exp://**",            // Trust all Expo URLs (wildcard)
+  "exp://10.198.*.*:*/**", // Trust specific IP range
+]
+```
+
+### Why trusted origins?
+
+Mobile apps using Expo need to handle OAuth redirects differently than web apps. The trusted origins configuration:
+
+- Allows authentication callbacks to mobile apps
+- Supports deep linking with custom URL schemes
+- Enables development with Expo's local server
+- Supports specific IP ranges for local testing
+
+<Tip>
+  If you're building a mobile app, add your app's custom URL scheme to the `trustedOrigins` array.
+</Tip>
+
+## Authentication API route
+
+Better Auth exposes a catch-all route for authentication:
+
+```typescript
+// /workspace/source/src/app/api/auth/[...all]/route.ts
+import { auth } from "@/lib/auth";
+import { toNextJsHandler } from "better-auth/next-js";
+
+export const { GET, POST } = toNextJsHandler(auth);
+```
+
+This route handles:
+- `/api/auth/sign-in` - Sign in with email/password
+- `/api/auth/sign-up` - Register new user
+- `/api/auth/sign-out` - Sign out
+- `/api/auth/callback/google` - OAuth callbacks
+- `/api/auth/session` - Get current session
+- And more...
+
+## Getting the authenticated user
+
+Use the `getRequestUser` utility to get the current user in API routes:
+
+```typescript
+import { getRequestUser } from "@/app/api/_utils";
+
+export async function GET(req: Request) {
+  const user = await getRequestUser(req);
+  if (!user) return apiError("Not authenticated", 401);
+
+  // Use user.id to query user-specific data
+  const notes = await prisma.note.findMany({
+    where: { userId: user.id },
+  });
+
+  return apiSuccess({ data: notes });
+}
+```
+
+### In server actions
+
+For Server Actions, use `getAuthedUser`:
+
+```typescript
+import { getAuthedUser } from "@/lib/fetch/get-authed-user";
+
+export async function createNote(content: string) {
+  const user = await getAuthedUser();
+  if (!user) return { error: "Not authenticated" };
+
+  const note = await prisma.note.create({
+    data: {
+      userId: user.id,
+      content,
+    },
+  });
+
+  return { data: note };
+}
+```
+
+## Verification model
+
+The Verification model supports email verification and password resets:
+
+```prisma
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+}
+```
+
+<Note>
+  The verification system supports email verification tokens and password reset tokens with expiration.
+</Note>
+
+## Database adapter
+
+Better Auth uses the Prisma adapter for database operations:
+
+```typescript
+database: prismaAdapter(prisma, {
+  provider: "postgresql",
+})
+```
+
+The adapter:
+- Automatically manages User, Account, Session, and Verification tables
+- Handles schema migrations through Prisma
+- Supports multiple database providers (Jottar uses PostgreSQL)
+- Provides type safety through Prisma Client
+
+## ID generation
+
+Jottar uses UUIDs for all primary keys:
+
+```typescript
+advanced: { 
+  database: { 
+    generateId: () => crypto.randomUUID() 
+  } 
+}
+```
+
+This ensures:
+- Cryptographically secure IDs
+- No collisions across distributed systems
+- Compatible with PostgreSQL's UUID type
+- Consistent with the Prisma schema's `@default(uuid())`
+
+<Accordion title="Better Auth features not covered">
+  Better Auth supports many additional features not explicitly configured in Jottar:
+
+  - **Email verification**: Send verification emails to confirm user emails
+  - **Password reset**: Token-based password reset flow
+  - **Two-factor authentication**: TOTP-based 2FA
+  - **Magic links**: Passwordless authentication via email
+  - **Rate limiting**: Protect against brute force attacks
+  - **Session management**: Revoke sessions, list active sessions
+  - **Multiple providers**: GitHub, Facebook, Twitter, and more
+
+  Refer to the [Better Auth documentation](https://better-auth.com) for implementation details.
+</Accordion>

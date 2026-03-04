@@ -1,0 +1,304 @@
+---
+title: Creating Notes
+description: Learn how to create and edit notes in Jottar using the Tiptap editor
+---
+
+## Overview
+
+Jottar provides a powerful note-taking experience built on the Tiptap rich-text editor. This guide walks you through creating notes, using the editor, and understanding Jottar's auto-save behavior.
+
+## Creating a New Note
+
+<Steps>
+  <Step title="Navigate to the new note page">
+    Click the "New Note" button or navigate to `/new` to create a fresh note.
+
+    When you first open the new note page, Jottar automatically checks localStorage for any draft content saved under `draft:new`. If found, your previous work is restored so you never lose progress.
+  </Step>
+
+  <Step title="Start writing in the editor">
+    The Tiptap editor loads with a clean canvas. Simply click anywhere in the editor area and start typing.
+
+    <Tip>
+      The editor initializes with `immediatelyRender: false` for optimal performance on page load.
+    </Tip>
+  </Step>
+
+  <Step title="Use the formatting toolbar">
+    Above the editor, you'll find a comprehensive toolbar with formatting options:
+
+    - **Undo/Redo** – Navigate your edit history
+    - **Bold** (`Ctrl/Cmd + B`) – Make text bold
+    - **Italic** (`Ctrl/Cmd + I`) – Italicize text
+    - **Strikethrough** – Strike through text
+    - **Bullet List** – Create unordered lists
+    - **Ordered List** – Create numbered lists
+    - **Code** – Inline code snippets
+    - **Code Block** – Multi-line code blocks
+    - **Horizontal Rule** – Insert dividers
+    - **Blockquote** – Quote text
+    - **Hard Break** – Insert line breaks
+
+    Each formatting option is available as a button in the scrollable toolbar.
+  </Step>
+
+  <Step title="Save your note">
+    When you're ready, click the **Save** button (floppy disk icon) in the toolbar.
+
+    <Note>
+      The Save button displays a yellow dot indicator when there are unsaved changes.
+    </Note>
+
+    Behind the scenes, Jottar:
+    1. Extracts the note content as JSON from the Tiptap editor
+    2. Calls `createNote()` server action with the content
+    3. Creates a new Note record in the database via `POST /api/notes`
+    4. Generates a UUID for the note
+    5. Redirects you to `/notes/{id}` where you can continue editing
+  </Step>
+</Steps>
+
+## Understanding the Editor
+
+### Tiptap Configuration
+
+Jottar uses **Tiptap** with the `StarterKit` extension configured for:
+
+```tsx
+// From ~/workspace/source/src/app/(notes)/new/page.client.tsx
+const extensions = [
+  StarterKit.configure({
+    orderedList: {
+      HTMLAttributes: { class: "list-decimal" }
+    },
+    bulletList: {
+      HTMLAttributes: { class: "list-disc" }
+    },
+    code: {
+      HTMLAttributes: { class: "bg-accent rounded-md p-1" }
+    },
+    codeBlock: {
+      HTMLAttributes: {
+        class: "bg-primary/80 text-primary-foreground p-2 text-sm rounded-md p-1"
+      }
+    },
+    heading: {
+      levels: [1, 2, 3, 4],
+      HTMLAttributes: { class: "tiptap-heading" }
+    }
+  })
+];
+```
+
+### Heading Levels
+
+Jottar supports **4 heading levels** (H1-H4). Use these to structure your notes hierarchically:
+
+- **H1** – Main title
+- **H2** – Section headers
+- **H3** – Subsections
+- **H4** – Minor subsections
+
+### Code Support
+
+Jottar provides two types of code formatting:
+
+1. **Inline code** – Styled with a subtle background (`bg-accent rounded-md p-1`)
+2. **Code blocks** – Full-width blocks with primary background for multi-line code snippets
+
+## Auto-Save and Drafts
+
+### Draft Persistence
+
+Jottar automatically saves your work to **localStorage** as you type:
+
+- **New notes** are saved to `draft:new`
+- **Existing notes** are saved to `draft:note:{id}`
+
+Every time the editor content changes, Jottar saves the current JSON structure:
+
+```tsx
+// From page.client.tsx
+useEffect(() => {
+  if (editor) {
+    const saveContent = () => {
+      localStorage.setItem("draft:new", JSON.stringify(editor.getJSON()));
+      setHasUnsavedChanges(true);
+    };
+    editor.on("update", saveContent);
+    return () => {
+      editor.off("update", saveContent);
+    };
+  }
+}, [editor]);
+```
+
+<Tip>
+  If you accidentally close the tab or navigate away, your draft will be restored when you return to the new note page.
+</Tip>
+
+### When You Save
+
+After clicking Save:
+
+1. The draft is moved from `draft:new` to `draft:note:{newNoteId}`
+2. A timestamp (`updatedAt`) is stored alongside the content
+3. Future edits compare `lastModified` timestamps to determine if local changes are newer than the server version
+
+<Warning>
+  If the save fails (e.g., network error), your draft remains in localStorage and you can retry saving.
+</Warning>
+
+## Editing Existing Notes
+
+When you open an existing note at `/notes/{id}`:
+
+<Steps>
+  <Step title="Note loads from database">
+    The server fetches the note from PostgreSQL via Prisma and passes it to the client component.
+  </Step>
+
+  <Step title="Draft detection">
+    Jottar checks for a local draft in `draft:note:{id}`. If the local `lastModified` timestamp is newer than the database `updatedAt`, the draft takes precedence.
+
+    ```tsx
+    const localLastModified = localDraft.lastModified
+      ? new Date(localDraft.lastModified)
+      : null;
+
+    if (localLastModified && localLastModified > dbUpdatedAt) {
+      unsaved = true;
+      initialContent = localDraft.content;
+    }
+    ```
+  </Step>
+
+  <Step title="Editor initializes">
+    The Tiptap editor is populated with either the draft content or the database content.
+  </Step>
+
+  <Step title="Edit and save">
+    As you type, changes are saved to localStorage. Clicking Save sends the updated content via `updateNote()` server action to `PATCH /api/notes/{id}`.
+  </Step>
+</Steps>
+
+## Title Extraction
+
+Jottar automatically extracts a title from your note content:
+
+- The **title** field in the database can be `null` if no title is explicitly set
+- The preview text is extracted by walking the JSON content tree and concatenating all text nodes
+- Note cards display "Untitled Note" if no title is available
+
+```tsx
+// From ~/workspace/source/src/lib/helpers/extract-text.ts
+function extractTextFromDoc(doc: any): string {
+  if (!doc?.content) return "";
+
+  let text = "";
+  const walk = (node: any) => {
+    if (node.type === "text") {
+      text += node.text + " ";
+    }
+    if (node.content) {
+      node.content.forEach(walk);
+    }
+  };
+  doc.content.forEach(walk);
+  return text.trim();
+}
+```
+
+<Tip>
+  While Jottar doesn't enforce a specific title format, starting your note with a heading (e.g., `# My Note Title`) makes it easier to identify notes in lists and search results.
+</Tip>
+
+## Best Practices
+
+<Steps>
+  <Step title="Start with a clear heading">
+    Begin each note with an H1 heading to establish a clear title. This makes notes easier to scan and search.
+  </Step>
+
+  <Step title="Use structure for long notes">
+    For longer notes, use H2 and H3 headings to create clear sections. This improves readability and makes it easier to jump to specific topics.
+  </Step>
+
+  <Step title="Save frequently">
+    While auto-save to localStorage protects against data loss, clicking Save ensures your changes are persisted to the server and synced across devices.
+  </Step>
+
+  <Step title="Use formatting purposefully">
+    - Use **bold** for emphasis
+    - Use *italic* for subtle emphasis or terms
+    - Use `inline code` for technical terms, variables, or commands
+    - Use code blocks for multi-line code snippets
+    - Use lists to break down ideas
+  </Step>
+
+  <Step title="Leverage keyboard shortcuts">
+    Learn the keyboard shortcuts for common formatting actions (bold, italic, etc.) to speed up your writing.
+  </Step>
+</Steps>
+
+## API Reference
+
+### Creating a Note
+
+**Endpoint:** `POST /api/notes`
+
+**Request Body:**
+```json
+{
+  "content": "{\"type\":\"doc\",\"content\":[...]}" 
+}
+```
+
+**Response:**
+```json
+{
+  "ok": true,
+  "data": {
+    "id": "uuid",
+    "content": "...",
+    "userId": "uuid",
+    "createdAt": "2024-01-01T00:00:00.000Z",
+    "updatedAt": "2024-01-01T00:00:00.000Z",
+    "title": null,
+    "folderId": null,
+    "isPinned": false,
+    "favorite": false,
+    "archived": false,
+    "trashedAt": null
+  }
+}
+```
+
+### Updating a Note
+
+**Endpoint:** `PATCH /api/notes/{id}`
+
+**Request Body (content update):**
+```json
+{
+  "content": "{\"type\":\"doc\",\"content\":[...]}" 
+}
+```
+
+**Request Body (title/folder update):**
+```json
+{
+  "title": "My Note Title",
+  "folderId": "uuid" 
+}
+```
+
+<Note>
+  You cannot update content and title/folder in the same request. Send separate PATCH requests for content vs. metadata updates.
+</Note>
+
+## Related Resources
+
+- [Organizing Notes](/guides/organizing-notes) – Learn about folders, tags, pinning, and favorites
+- [Searching](/guides/searching) – Discover how to find notes quickly
+- [Mobile App](/guides/mobile-app) – Access Jottar from React Native

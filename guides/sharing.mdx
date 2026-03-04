@@ -1,0 +1,373 @@
+---
+title: Sharing and Duplication
+description: Learn about note duplication, shareable links, and collaboration features in Jottar
+---
+
+## Overview
+
+Jottar includes infrastructure for sharing and collaborating on notes. While full sharing features are still in development, the schema and duplication features are already implemented and ready to use.
+
+## Note Duplication
+
+### What Is Duplication?
+
+Note duplication creates a **copy of an existing note** with all its content, folder assignment, and tags:
+
+- Duplicated notes have a new UUID
+- The title is appended with " (Copy)"
+- Folder and tags are preserved from the original
+- The duplicate is owned by the user who duplicated it
+
+### How to Duplicate a Note
+
+<Steps>
+  <Step title="Open the context menu">
+    Right-click on any note card to open the context menu.
+  </Step>
+
+  <Step title="Select 'Duplicate note'">
+    Click "Duplicate note" in the context menu.
+  </Step>
+
+  <Step title="Copy is created">
+    A new note is created with the same content, folder, and tags. A success toast appears confirming the duplication.
+  </Step>
+
+  <Step title="Edit the duplicate">
+    The duplicate appears in your notes list and can be edited independently of the original.
+  </Step>
+</Steps>
+
+**Implementation:**
+
+```tsx
+// From ~/workspace/source/src/components/notes/note-card.tsx
+const handleDuplicateNote = async (noteId: string) => {
+  const res = await duplicateNote(noteId);
+  if (res?.error) {
+    toast.error(res.error);
+    return;
+  }
+  if (res?.data) {
+    toast.success("Note duplicated");
+  }
+};
+```
+
+### API Endpoint
+
+**Endpoint:** `POST /api/notes/{id}/duplicate`
+
+**Request:** No body required
+
+**Response:**
+```json
+{
+  "ok": true,
+  "data": {
+    "id": "new-uuid",
+    "title": "Original Title (Copy)",
+    "content": "...",
+    "folderId": "same-folder-id",
+    "userId": "your-user-id",
+    "createdAt": "2024-01-01T00:00:00.000Z",
+    "updatedAt": "2024-01-01T00:00:00.000Z",
+    // ... other fields
+  }
+}
+```
+
+### Implementation Details
+
+```tsx
+// From ~/workspace/source/src/app/api/notes/[id]/duplicate/route.ts
+export async function POST(req: Request, { params }) {
+  const user = await getRequestUser(req);
+  if (!user) return apiError("Not authenticated", 401);
+
+  const { id } = await params;
+
+  const note = await prisma.note.findFirst({
+    where: { id, userId: user.id },
+    include: { noteTags: true }
+  });
+  if (!note) return apiError("Note not found", 404);
+
+  const baseTitle = note.title ?? "Untitled";
+  const truncatedTitle = baseTitle.substring(0, 248); // 255 - 7 chars for " (Copy)"
+  const newTitle = `${truncatedTitle} (Copy)`;
+
+  const data = await prisma.note.create({
+    data: {
+      userId: user.id,
+      content: note.content,
+      folderId: note.folderId,
+      title: newTitle,
+      noteTags: {
+        create: note.noteTags.map((nt) => ({
+          tagId: nt.tagId
+        }))
+      }
+    }
+  });
+
+  return apiSuccess({ data }, 201);
+}
+```
+
+<Tip>
+  Duplication is useful for creating templates or variations of existing notes without starting from scratch.
+</Tip>
+
+## Shareable Links
+
+### Schema Fields
+
+Jottar's database schema includes fields for sharing functionality:
+
+```prisma
+// From ~/workspace/source/prisma/schema.prisma
+model Note {
+  id               String        @id @default(uuid())
+  // ...
+  allowCopy        Boolean       @default(false)
+  copiedFromNoteId String?       @db.Uuid
+  copiedFromUserId String?       @db.Uuid
+  shareLinkType    ShareLinkType @default(USERNAME)
+  shareable        Boolean       @default(false)
+  // ...
+  copiedFromNote   Note?         @relation("NoteCopies", fields: [copiedFromNoteId], references: [id])
+  copies           Note[]        @relation("NoteCopies")
+  copiedFromUser   User?         @relation("NoteCopiedFromUser", fields: [copiedFromUserId], references: [id])
+  // ...
+}
+
+enum ShareLinkType {
+  USERNAME
+  TOKEN
+}
+```
+
+### Field Descriptions
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `shareable` | `Boolean` | Whether the note can be shared via a public link |
+| `shareLinkType` | `ShareLinkType` | Type of share link: `USERNAME` (user-friendly URL) or `TOKEN` (secure random token) |
+| `allowCopy` | `Boolean` | Whether recipients can duplicate the shared note |
+| `copiedFromNoteId` | `String?` | Reference to the original note if this is a copy |
+| `copiedFromUserId` | `String?` | User who created the original note |
+| `copiedFromNote` | `Note?` | Relation to the original note |
+| `copies` | `Note[]` | All notes that were copied from this note |
+
+### Share Link Types
+
+**USERNAME Link:**
+- Format: `/share/@username/note-slug`
+- User-friendly and memorable
+- Based on the note owner's username
+
+**TOKEN Link:**
+- Format: `/share/{random-token}`
+- More secure and harder to guess
+- Useful for sensitive content
+
+<Note>
+  The share link UI is not yet fully implemented in the codebase. The schema is ready, but the frontend components for enabling/disabling sharing are still in development.
+</Note>
+
+## Allow Copy Feature
+
+### What Is Allow Copy?
+
+The `allowCopy` field controls whether users who view a shared note can **duplicate it to their own workspace**:
+
+- When `allowCopy = true`, recipients see a "Copy to my notes" button
+- The copied note tracks the original via `copiedFromNoteId` and `copiedFromUserId`
+- The original note can see all its copies via the `copies` relation
+
+### Use Cases
+
+<Tip>
+  **Templates:** Share a note template with `allowCopy = true` so others can duplicate it and customize.
+</Tip>
+
+<Tip>
+  **Read-only sharing:** Set `allowCopy = false` to share a note without letting others duplicate it.
+</Tip>
+
+<Tip>
+  **Collaboration:** Use `allowCopy = true` to let team members create their own versions of a shared document.
+</Tip>
+
+## Tracking Copied Notes
+
+### Copy Relationships
+
+Jottar tracks the relationship between original notes and their copies:
+
+```prisma
+copiedFromNote   Note?   @relation("NoteCopies", fields: [copiedFromNoteId], references: [id])
+copies           Note[]  @relation("NoteCopies")
+copiedFromUser   User?   @relation("NoteCopiedFromUser", fields: [copiedFromUserId], references: [id])
+```
+
+### Querying Copy Relationships
+
+You can query the original note and all its copies:
+
+```tsx
+const note = await prisma.note.findUnique({
+  where: { id: noteId },
+  include: {
+    copies: true,           // All notes copied from this one
+    copiedFromNote: true,   // The original note (if this is a copy)
+    copiedFromUser: true    // The user who created the original
+  }
+});
+```
+
+<Tip>
+  Use these relationships to build features like "View original" or "See all copies" in the UI.
+</Tip>
+
+## Collaboration Possibilities
+
+### Future Features
+
+While not yet implemented, the schema supports several collaboration features:
+
+<Steps>
+  <Step title="Real-time sharing">
+    Create shareable links that allow multiple users to view (and optionally copy) notes.
+  </Step>
+
+  <Step title="Public note galleries">
+    Allow users to publish notes to a public gallery where others can discover and copy them.
+  </Step>
+
+  <Step title="Team workspaces">
+    Extend the schema to support team folders where multiple users can collaborate on notes.
+  </Step>
+
+  <Step title="Copy tracking">
+    Show analytics on how many times a note has been copied and by whom.
+  </Step>
+
+  <Step title="Version control">
+    Track when a copy diverges from the original and offer merge/sync options.
+  </Step>
+</Steps>
+
+## Real Examples from Schema
+
+### Enabling Sharing
+
+To make a note shareable:
+
+```tsx
+// PATCH /api/notes/{id}
+{
+  "shareable": true,
+  "shareLinkType": "USERNAME",
+  "allowCopy": true
+}
+```
+
+<Warning>
+  The UI for these fields is not yet implemented. You'll need to update them via direct API calls or database updates.
+</Warning>
+
+### Copying a Shared Note
+
+When a user copies a shared note:
+
+```tsx
+const copiedNote = await prisma.note.create({
+  data: {
+    userId: currentUser.id,
+    content: originalNote.content,
+    title: originalNote.title,
+    copiedFromNoteId: originalNote.id,
+    copiedFromUserId: originalNote.userId,
+    // Copy folder and tags as well
+    folderId: originalNote.folderId,
+    noteTags: {
+      create: originalNote.noteTags.map((nt) => ({
+        tagId: nt.tagId
+      }))
+    }
+  }
+});
+```
+
+### Listing Copies of a Note
+
+To see all notes that were copied from a specific note:
+
+```tsx
+const originalNote = await prisma.note.findUnique({
+  where: { id: noteId },
+  include: {
+    copies: {
+      include: {
+        user: {
+          select: { name: true, email: true }
+        }
+      }
+    }
+  }
+});
+
+console.log(`This note has ${originalNote.copies.length} copies`);
+originalNote.copies.forEach((copy) => {
+  console.log(`Copied by ${copy.user.name} on ${copy.createdAt}`);
+});
+```
+
+## API Reference
+
+### Duplicate a Note
+
+**Endpoint:** `POST /api/notes/{id}/duplicate`
+
+**Request:** No body required
+
+**Response:**
+```json
+{
+  "ok": true,
+  "data": {
+    "id": "new-uuid",
+    "title": "Original Title (Copy)",
+    "content": "...",
+    "folderId": "same-folder-id",
+    "userId": "your-user-id",
+    "noteTags": [...],
+    // ... other fields
+  }
+}
+```
+
+### Update Sharing Settings
+
+**Endpoint:** `PATCH /api/notes/{id}`
+
+**Request Body:**
+```json
+{
+  "shareable": true,
+  "shareLinkType": "USERNAME",
+  "allowCopy": true
+}
+```
+
+<Note>
+  This endpoint currently only supports updating `content`, `title`, and `folderId`. Sharing field updates are not yet implemented in the API handler.
+</Note>
+
+## Related Resources
+
+- [Creating Notes](/guides/creating-notes) – Learn how to create and edit notes
+- [Organizing Notes](/guides/organizing-notes) – Master folders, tags, and status flags
+- [Mobile App](/guides/mobile-app) – Access Jottar from React Native

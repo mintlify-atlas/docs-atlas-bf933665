@@ -1,0 +1,420 @@
+---
+title: Searching and Filtering
+description: Learn how to find notes quickly in Jottar using folders, tags, and views
+---
+
+## Overview
+
+Jottar helps you find notes quickly through folder navigation, view-based filtering, and tag filtering. While a full-text search feature is not currently implemented in the codebase, Jottar provides multiple ways to browse and locate notes efficiently.
+
+## Note Browsing Experience
+
+### Views
+
+Jottar organizes notes into several views, each accessible from the main navigation:
+
+1. **Active Notes** (`/notes`) – All non-archived, non-trashed notes
+2. **Favorites** (`/favorites`) – Notes marked as favorites
+3. **Archive** (`/archive`) – Archived notes
+4. **Trash** (`/trash`) – Trashed notes
+
+### View Implementation
+
+Each view filters notes based on specific criteria:
+
+```tsx
+// From ~/workspace/source/src/app/(root)/notes/page.client.tsx
+export type NotesView = "active" | "favorites" | "archived" | "trash" | "folder";
+
+const applyPatchToList = useCallback((updated: Partial<Note> & { id: string }) => {
+  setNotes((prev) => {
+    // Remove if favorited and not on favorites page
+    if (updated.favorite === false && view === "favorites") {
+      return prev.filter((p) => p.id !== updated.id);
+    }
+
+    // Remove if unarchived while on archive page
+    if (updated.archived === false && view === "archived") {
+      return prev.filter((p) => p.id !== updated.id);
+    }
+
+    // Remove if archived when not showing archived
+    if (updated.archived === true && !(view === "archived")) {
+      return prev.filter((p) => p.id !== updated.id);
+    }
+
+    // Remove if trashed
+    if (updated.trashedAt && !(view === "trash")) {
+      return prev.filter((p) => p.id !== updated.id);
+    }
+
+    // ...
+  });
+}, [view]);
+```
+
+<Note>
+  Notes are automatically filtered in real-time as their status changes (favorited, archived, trashed).
+</Note>
+
+## Filtering by Folder
+
+### Folder Navigation
+
+Folders provide the primary organizational structure in Jottar:
+
+<Steps>
+  <Step title="Browse folders">
+    Navigate to the Folders page to see all your folders with note counts.
+  </Step>
+
+  <Step title="Open a folder">
+    Click on a folder to view all notes within that folder.
+  </Step>
+
+  <Step title="View folder notes">
+    The folder view displays only notes assigned to that specific folder, filtered by `folderId`.
+  </Step>
+</Steps>
+
+**API Implementation:**
+
+The folders API supports different modes for retrieving folder data:
+
+```tsx
+// GET /api/folders?mode=overview
+// Returns folders with note counts
+
+// GET /api/folders?mode=one&id={folderId}
+// Returns a single folder with all its notes
+```
+
+### Filtering Notes by Folder
+
+When viewing a folder, notes are filtered by the `folderId` field in the database:
+
+```prisma
+// From schema.prisma
+model Note {
+  id       String  @id @default(uuid())
+  folderId String? @db.Uuid
+  folder   Folder? @relation(fields: [folderId], references: [id])
+  // ...
+
+  @@index([folderId])
+  @@index([userId, folderId])
+}
+```
+
+<Tip>
+  Folders are indexed in the database for fast filtering, even with large note collections.
+</Tip>
+
+### Root-Level Notes
+
+Notes without a folder (`folderId = null`) are considered **root-level notes**:
+
+- These notes appear in the main "Notes" view
+- They are not hidden – they're just not assigned to a folder
+- You can move them to folders at any time via the context menu
+
+## Filtering by Tags
+
+### Tag-Based Filtering
+
+Tags provide a flexible way to filter notes across folders:
+
+- Tags are stored in a many-to-many relationship via the `NoteTag` join table
+- Each note can have multiple tags
+- Tags can be used to filter notes by theme, priority, status, etc.
+
+**Database Schema:**
+
+```prisma
+model NoteTag {
+  id        String   @id @default(uuid())
+  noteId    String
+  tagId     String
+  createdAt DateTime @default(now())
+  note      Note     @relation(...)
+  tag       Tag      @relation(...)
+
+  @@unique([noteId, tagId])
+  @@index([noteId])
+  @@index([tagId])
+}
+```
+
+### Retrieving Tags
+
+**API Endpoint:** `GET /api/tags`
+
+**Response:**
+```json
+{
+  "ok": true,
+  "data": [
+    {
+      "id": "uuid",
+      "name": "urgent",
+      "userId": "uuid",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "noteTags": [
+        { "noteId": "uuid1", "tagId": "uuid" },
+        { "noteId": "uuid2", "tagId": "uuid" }
+      ]
+    }
+  ]
+}
+```
+
+<Tip>
+  Each tag includes a `noteTags` array showing all notes associated with that tag. Use this to implement client-side tag filtering.
+</Tip>
+
+## Finding Archived Notes
+
+### Viewing the Archive
+
+To find archived notes:
+
+<Steps>
+  <Step title="Navigate to Archive">
+    Go to `/archive` to view all archived notes.
+  </Step>
+
+  <Step title="Browse archived notes">
+    The archive page displays all notes where `archived = true` and `trashedAt = null`.
+  </Step>
+
+  <Step title="Open or unarchive">
+    Click on a note to open it, or right-click to unarchive it.
+  </Step>
+</Steps>
+
+**Query Logic:**
+
+```tsx
+// Archived notes are filtered by:
+where: {
+  userId: user.id,
+  archived: true,
+  trashedAt: null
+}
+```
+
+<Note>
+  Archived notes retain their folder assignments. When unarchived, they return to their original folder.
+</Note>
+
+## Finding Trashed Notes
+
+### Viewing the Trash
+
+To find trashed notes:
+
+<Steps>
+  <Step title="Navigate to Trash">
+    Go to `/trash` to view all trashed notes.
+  </Step>
+
+  <Step title="Browse trashed notes">
+    The trash page displays all notes where `trashedAt IS NOT NULL`.
+  </Step>
+
+  <Step title="Restore or permanently delete">
+    Right-click a note to restore it or permanently delete it.
+  </Step>
+</Steps>
+
+**Query Logic:**
+
+```tsx
+// Trashed notes are filtered by:
+where: {
+  userId: user.id,
+  trashedAt: { not: null }
+}
+```
+
+<Warning>
+  Trashed notes may be permanently deleted after a retention period via the cleanup cron job.
+</Warning>
+
+## Overview Mode
+
+### Quick Overview
+
+Jottar provides an **overview mode** for quickly accessing recent and pinned notes:
+
+**API Endpoint:** `GET /api/notes?mode=overview`
+
+**Logic:**
+
+```tsx
+// From ~/workspace/source/src/app/api/notes/route.ts
+if (mode === "overview") {
+  // Get up to 2 pinned notes
+  const pinned = await prisma.note.findMany({
+    where: {
+      userId: user.id,
+      archived: false,
+      trashedAt: null,
+      isPinned: true
+    },
+    orderBy: { updatedAt: "desc" },
+    take: 2
+  });
+
+  const remaining = 3 - pinned.length;
+
+  // Fill remaining slots with unpinned notes
+  const unpinned = await prisma.note.findMany({
+    where: {
+      userId: user.id,
+      archived: false,
+      trashedAt: null,
+      isPinned: false
+    },
+    orderBy: { updatedAt: "desc" },
+    take: remaining
+  });
+
+  return apiSuccess({ data: [...pinned, ...unpinned] });
+}
+```
+
+<Tip>
+  The overview mode is perfect for dashboards or home pages, showing the most relevant notes at a glance.
+</Tip>
+
+## Sorting and Ordering
+
+### Default Sort Order
+
+Notes are sorted by **most recently updated** (`updatedAt DESC`) by default:
+
+```tsx
+orderBy: { updatedAt: "desc" }
+```
+
+### Pinned-First Ordering
+
+In the **active notes view**, pinned notes appear first:
+
+```tsx
+// From page.client.tsx
+if (updated.isPinned !== undefined && view === "active") {
+  const pinned = replaced.filter((r) => r.isPinned);
+  const others = replaced.filter((r) => !r.isPinned);
+  return [...pinned, ...others];
+}
+```
+
+<Note>
+  Within each group (pinned and unpinned), notes are sorted by `updatedAt`.
+</Note>
+
+## Search Best Practices
+
+### Organize Proactively
+
+Since full-text search is not yet implemented, organizing notes proactively is key:
+
+<Steps>
+  <Step title="Use descriptive titles">
+    Start each note with a clear heading or title that describes the content.
+  </Step>
+
+  <Step title="Assign folders consistently">
+    Place notes in folders as you create them, rather than leaving them at the root level.
+  </Step>
+
+  <Step title="Tag liberally">
+    Add multiple tags to notes so you can filter by different attributes later.
+  </Step>
+
+  <Step title="Pin frequently accessed notes">
+    Pin notes you reference often so they're always at the top of the list.
+  </Step>
+
+  <Step title="Favorite important notes">
+    Mark key notes as favorites so you can find them quickly in the Favorites view.
+  </Step>
+</Steps>
+
+### Leverage Multiple Views
+
+<Tip>
+  Use a combination of folders, tags, favorites, and pinning to create a multi-layered organization system. This makes it easier to find notes from different perspectives.
+</Tip>
+
+### Regular Maintenance
+
+<Steps>
+  <Step title="Archive old notes">
+    Regularly archive notes you no longer need in your active workspace.
+  </Step>
+
+  <Step title="Clean up folders">
+    Periodically review folders and consolidate or rename them for clarity.
+  </Step>
+
+  <Step title="Prune unused tags">
+    Remove tags that are no longer useful to keep your tag list manageable.
+  </Step>
+
+  <Step title="Empty trash">
+    Review trashed notes periodically to ensure nothing important was accidentally deleted.
+  </Step>
+</Steps>
+
+## Cross-Tab Synchronization
+
+### Real-Time Updates
+
+Jottar uses the **BroadcastChannel API** to synchronize note changes across browser tabs:
+
+```tsx
+// From page.client.tsx
+useEffect(() => {
+  let channel: BroadcastChannel | null = null;
+  try {
+    channel = new BroadcastChannel("notes");
+    channel.onmessage = (ev) => {
+      if (ev.data?.type === "patch") {
+        applyPatchToList(ev.data.data);
+      }
+    };
+  } catch (e) {
+    // BroadcastChannel not supported — ignore
+  }
+  return () => {
+    if (channel) channel.close();
+  };
+}, [applyPatchToList]);
+```
+
+<Note>
+  When you pin, favorite, archive, or trash a note in one tab, the change is instantly reflected in all other open tabs.
+</Note>
+
+## Future: Full-Text Search
+
+<Warning>
+  **Full-text search is not yet implemented** in the Jottar codebase. The current browsing experience relies on folders, tags, and views.
+</Warning>
+
+When full-text search is implemented, it will likely:
+
+- Search note content (the JSON document from Tiptap)
+- Search note titles
+- Support filtering by folder, tag, and status
+- Provide relevance-based ranking
+
+## Related Resources
+
+- [Creating Notes](/guides/creating-notes) – Learn how to create and edit notes
+- [Organizing Notes](/guides/organizing-notes) – Master folders, tags, pinning, and favorites
+- [Mobile App](/guides/mobile-app) – Access Jottar from React Native

@@ -1,80 +1,303 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quickstart
+description: Get started with Jottar in 5 minutes - create your account, write your first note, and organize your content
 ---
 
-## Get started in three steps
+## Get started in 5 minutes
 
-Get your documentation site running locally and make your first customization.
+This guide will walk you through the essential features of Jottar. By the end, you'll know how to create notes, organize them with folders, and use tags for flexible categorization.
 
-### Step 1: Set up your local environment
+<Steps>
+  <Step title="Create your account">
+    Navigate to the sign-up page and create your account with email and password:
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+    ```tsx
+    // Sign up with email and password
+    const result = await authClient.signUp.email({
+      name: "John Doe",
+      email: "john@example.com",
+      password: "your-secure-password"
+    });
+    ```
 
-### Step 2: Deploy your changes
+    <Note>
+      Passwords must be at least 6 characters long. After signing up, you'll be automatically signed in and redirected to your notes dashboard.
+    </Note>
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+    When you create an account, Jottar automatically creates default folders for you to help organize your notes.
+  </Step>
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+  <Step title="Create your first note">
+    Click the "New Note" button or navigate to `/new` to open the note editor:
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+    ```tsx
+    // Notes are created with JSON content from the Tiptap editor
+    const content = editor.getJSON();
+    const result = await createNote(JSON.stringify(content));
 
-### Step 3: Go live
+    if (result.data) {
+      const newNoteId = result.data.id;
+      // Navigate to the new note
+      router.push(`/notes/${newNoteId}`);
+    }
+    ```
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+    The Tiptap editor supports rich formatting:
+
+    <CardGroup cols={2}>
+      <Card title="Text formatting" icon="bold">
+        - **Bold**, *italic*, ~~strikethrough~~
+        - `Inline code`
+        - Headings (H1-H4)
+      </Card>
+      
+      <Card title="Block elements" icon="list">
+        - Bulleted lists
+        - Numbered lists
+        - Code blocks
+        - Blockquotes
+        - Horizontal rules
+      </Card>
+    </CardGroup>
+
+    <Tip>
+      Notes auto-save to localStorage as you type, so you won't lose your work if you accidentally close the tab.
+    </Tip>
+  </Step>
+
+  <Step title="Use the rich text editor">
+    The Tiptap editor provides a toolbar with formatting options:
+
+    ```tsx
+    // Editor configuration
+    const extensions = [
+      StarterKit.configure({
+        orderedList: {
+          HTMLAttributes: { class: "list-decimal" }
+        },
+        bulletList: {
+          HTMLAttributes: { class: "list-disc" }
+        },
+        code: {
+          HTMLAttributes: { class: "bg-accent rounded-md p-1" }
+        },
+        codeBlock: {
+          HTMLAttributes: {
+            class: "bg-primary/80 text-primary-foreground p-2 text-sm rounded-md"
+          }
+        },
+        heading: {
+          levels: [1, 2, 3, 4]
+        }
+      })
+    ];
+
+    const editor = useEditor({
+      extensions,
+      content: initialContent
+    });
+    ```
+
+    The toolbar includes:
+    - Undo/Redo controls
+    - Save button (with loading state)
+    - Text formatting (bold, italic, strikethrough)
+    - Lists (bulleted, numbered)
+    - Code (inline and blocks)
+    - Block elements (horizontal rule, blockquote, hard break)
+  </Step>
+
+  <Step title="Organize with folders">
+    Create folders to group related notes:
+
+    ```tsx
+    // Create a new folder
+    const result = await createFolder({
+      name: "Work",
+      slug: "work",
+      description: "Work-related notes and tasks",
+      userId: user.id
+    });
+    ```
+
+    <Accordion title="Folder creation details">
+      Folders require three fields:
+      - **name**: Display name (3-30 characters)
+      - **slug**: URL-friendly identifier (lowercase, hyphens allowed)
+      - **description**: Optional description (up to 255 characters)
+
+      The slug must match the pattern: `^[a-z0-9]+(?:-[a-z0-9]+)*$`
+    </Accordion>
+
+    Assign notes to folders using the API:
+
+    ```tsx
+    // Move a note to a folder
+    await fetch(`/api/notes/${noteId}/folder`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ folderId: 'folder-uuid' })
+    });
+
+    // Remove note from folder
+    await fetch(`/api/notes/${noteId}/folder`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ folderId: null })
+    });
+    ```
+  </Step>
+
+  <Step title="Add tags to notes">
+    Tags provide flexible categorization across folders:
+
+    ```tsx
+    // Create a new tag
+    const tagResult = await fetch('/api/tags', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'urgent' })
+    });
+
+    // Get all tags
+    const response = await fetch('/api/tags');
+    const { data: tags } = await response.json();
+    ```
+
+    Tags are associated with notes through the `NoteTag` join table, allowing many-to-many relationships.
+
+    <Note>
+      Tag names must be unique per user and can be up to 100 characters long.
+    </Note>
+  </Step>
+
+  <Step title="Pin, favorite, and archive">
+    Use note metadata to organize your workflow:
+
+    ```tsx
+    // Pin a note (appears at top of lists)
+    await fetch(`/api/notes/${noteId}/toggle-pin`, {
+      method: 'POST'
+    });
+
+    // Mark as favorite
+    await fetch(`/api/notes/${noteId}/toggle-favorite`, {
+      method: 'POST'
+    });
+
+    // Archive a note (hide from main view)
+    await fetch(`/api/notes/${noteId}/toggle-archive`, {
+      method: 'POST'
+    });
+    ```
+
+    Each endpoint toggles the boolean value using SQL `NOT`, so calling it again reverses the action.
+  </Step>
+
+  <Step title="Manage note lifecycle">
+    Notes can be trashed and restored:
+
+    ```tsx
+    // Soft-delete a note (sets trashedAt timestamp)
+    await fetch(`/api/notes/${noteId}/trash`, {
+      method: 'POST'
+    });
+
+    // Restore a trashed note (sets trashedAt to null)
+    await fetch(`/api/notes/${noteId}/restore`, {
+      method: 'POST'
+    });
+    ```
+
+    <Warning>
+      Trashed notes are automatically deleted after a certain period by a cleanup cron job at `/api/cron/cleanup-trashed-notes`.
+    </Warning>
+
+    You can also duplicate notes:
+
+    ```tsx
+    // Duplicate a note (copies content and tags)
+    await fetch(`/api/notes/${noteId}/duplicate`, {
+      method: 'POST'
+    });
+    ```
+
+    The duplicate will have " (Copy)" appended to the title.
+  </Step>
+</Steps>
+
+## Working with the API
+
+Jottar provides a RESTful API that follows consistent patterns:
+
+### Fetch notes
+
+```tsx
+// Get all notes
+const response = await fetch('/api/notes');
+const { ok, data } = await response.json();
+
+// Get overview (up to 3 notes: 2 pinned + 1 unpinned)
+const overview = await fetch('/api/notes?mode=overview');
+
+// Get single note by ID
+const note = await fetch(`/api/notes/${noteId}`);
+// or
+const note = await fetch(`/api/notes?mode=one&id=${noteId}`);
+```
+
+### Update notes
+
+```tsx
+// Update content only
+await fetch(`/api/notes/${noteId}`, {
+  method: 'PATCH',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    content: JSON.stringify(editor.getJSON())
+  })
+});
+
+// Update title and/or folder
+await fetch(`/api/notes/${noteId}`, {
+  method: 'PATCH',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    title: 'Updated Title',
+    folderId: 'folder-uuid-or-null'
+  })
+});
+```
+
+<Warning>
+  Do not mix content updates with title/folder updates in the same request. The API will return an error.
+</Warning>
+
+### Fetch folders
+
+```tsx
+// Get all folders
+const folders = await fetch('/api/folders');
+
+// Get folder with notes (supports pagination)
+const folder = await fetch(
+  '/api/folders?folderSlug=work&take=20&skip=0'
+);
+
+// Get folders for dropdown (minimal data)
+const dropdown = await fetch('/api/folders?mode=dropdown');
+```
 
 ## Next steps
 
-Now that you have your docs running, explore these key features:
+Now that you've learned the basics, explore more advanced topics:
 
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Installation" icon="server" href="/installation">
+    Deploy Jottar to production
+  </Card>
+  
+  <Card title="API Reference" icon="code" href="/api/overview">
+    Explore all API endpoints
+  </Card>
 </CardGroup>
-
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>

@@ -1,97 +1,160 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: Jottar Documentation
+mode: custom
 ---
 
-## Setting up
+<div className="relative overflow-hidden bg-gradient-to-br from-[#6366f1] via-[#4f46e5] to-[#4338ca] dark:from-[#4f46e5] dark:via-[#4338ca] dark:to-[#3730a3] py-20">
+  <div className="max-w-6xl mx-auto px-6 lg:px-8">
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+      <div className="lg:col-span-7">
+        <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white mb-6">
+          Welcome to Jottar
+        </h1>
+        <p className="text-lg sm:text-xl text-white/90 max-w-2xl mb-8">
+          A modern note-taking platform designed for simplicity and power. Organize your thoughts with folders, tags, and rich text editing across web and mobile.
+        </p>
+        <div className="flex flex-wrap gap-4">
+          <a 
+            href="/quickstart" 
+            className="inline-flex items-center px-6 py-3 bg-white text-[#6366f1] font-semibold rounded-lg hover:bg-gray-100 transition-colors no-underline"
+          >
+            Get started
+            <svg className="ml-2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </a>
+          <a 
+            href="/api/overview" 
+            className="inline-flex items-center px-6 py-3 border-2 border-white/30 bg-white/10 text-white font-semibold rounded-lg hover:bg-white/20 transition-colors no-underline"
+          >
+            API reference
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
-Get your documentation site up and running in minutes.
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <div className="mb-16">
+    <h2 className="text-2xl sm:text-3xl font-semibold text-gray-900 dark:text-white mb-3">
+      Quick start
+    </h2>
+    <p className="text-base text-gray-600 dark:text-gray-400 mb-8">
+      Get up and running with Jottar in minutes
+    </p>
+    
+    <Steps>
+      <Step title="Create your account">
+        Sign up at [jottar.vercel.app](https://jottar.vercel.app) using email and password or Google OAuth.
+        
+        <Note>
+          Your account comes with authentication powered by Better Auth, supporting both email/password and Google sign-in.
+        </Note>
+      </Step>
+      
+      <Step title="Create your first note">
+        Click the **New Note** button to start writing. The rich text editor supports formatting, lists, and more.
+        
+        ```typescript
+        // Creating a note via API
+        const response = await fetch('/api/notes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: 'My first note' })
+        });
+        ```
+      </Step>
+      
+      <Step title="Organize with folders">
+        Create folders to group related notes. Move notes between folders by updating the folder assignment.
+        
+        <Tip>
+          Use folders for broad categories (Work, Personal, Projects) and tags for cross-cutting themes.
+        </Tip>
+      </Step>
+      
+      <Step title="Explore mobile access">
+        Connect from React Native apps using the RESTful API. See the [React Native setup guide](/api/react-native/setup) for details.
+      </Step>
+    </Steps>
+  </div>
 
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
+  <div className="mb-16">
+    <h2 className="text-2xl sm:text-3xl font-semibold text-gray-900 dark:text-white mb-3">
+      Core features
+    </h2>
+    <p className="text-base text-gray-600 dark:text-gray-400 mb-8">
+      Everything you need to organize your notes effectively
+    </p>
+    
+    <CardGroup cols={2}>
+      <Card title="Notes" icon="note-sticky" href="/features/notes">
+        Create, edit, and manage notes with rich text formatting. Pin important notes and archive old ones.
+      </Card>
+      <Card title="Folders" icon="folder" href="/features/folders">
+        Organize notes into folders with custom names and descriptions. Navigate with ease.
+      </Card>
+      <Card title="Tags" icon="tag" href="/features/tags">
+        Tag notes for cross-cutting organization. One note can have multiple tags.
+      </Card>
+      <Card title="Organization" icon="layer-group" href="/features/organization">
+        Pin, favorite, archive, and trash notes. Restore from trash when needed.
+      </Card>
+      <Card title="Authentication" icon="shield-halved" href="/features/authentication">
+        Secure sign-in with email/password or Google OAuth via Better Auth.
+      </Card>
+      <Card title="API Access" icon="code" href="/api/overview">
+        RESTful API for web and mobile integration with consistent JSON responses.
+      </Card>
+    </CardGroup>
+  </div>
 
-## Make it yours
+  <div className="mb-16">
+    <h2 className="text-2xl sm:text-3xl font-semibold text-gray-900 dark:text-white mb-3">
+      Explore by topic
+    </h2>
+    <p className="text-base text-gray-600 dark:text-gray-400 mb-8">
+      Dive deeper into specific workflows
+    </p>
+    
+    <CardGroup cols={3}>
+      <Card title="Creating notes" icon="pen" href="/guides/creating-notes">
+        Learn the editor features and formatting options
+      </Card>
+      <Card title="Organizing notes" icon="sitemap" href="/guides/organizing-notes">
+        Best practices for folders, tags, and filters
+      </Card>
+      <Card title="Searching" icon="magnifying-glass" href="/guides/searching">
+        Find notes quickly with powerful search
+      </Card>
+      <Card title="Sharing" icon="share-nodes" href="/guides/sharing">
+        Share notes and duplicate for reuse
+      </Card>
+      <Card title="Mobile app" icon="mobile" href="/guides/mobile-app">
+        Access Jottar from React Native apps
+      </Card>
+      <Card title="API reference" icon="terminal" href="/api/overview">
+        Complete endpoint documentation
+      </Card>
+    </CardGroup>
+  </div>
 
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
-  </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
-  </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
-  </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
-  </Card>
-</Columns>
-
-## Create beautiful pages
-
-Everything you need to create world-class documentation.
-
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
-
-## Need inspiration?
-
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+  <div className="rounded-2xl bg-gradient-to-br from-[#6366f1]/10 to-[#4f46e5]/10 dark:from-[#4f46e5]/20 dark:to-[#4338ca]/20 border border-[#6366f1]/20 dark:border-[#4f46e5]/30 p-8 sm:p-12">
+    <h2 className="text-2xl sm:text-3xl font-semibold text-gray-900 dark:text-white mb-4">
+      Ready to get started?
+    </h2>
+    <p className="text-base text-gray-600 dark:text-gray-400 mb-6 max-w-2xl">
+      Follow our quickstart guide to create your first note and start organizing your thoughts today.
+    </p>
+    <a 
+      href="/quickstart" 
+      className="inline-flex items-center px-6 py-3 bg-[#6366f1] text-white font-semibold rounded-lg hover:bg-[#4f46e5] transition-colors no-underline"
+    >
+      Get started now
+      <svg className="ml-2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+      </svg>
+    </a>
+  </div>
+</div>

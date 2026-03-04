@@ -1,0 +1,101 @@
+{
+  "projectType": "saas",
+  "projectName": "Jottar",
+  "projectDescription": "A modern note-taking application with folders, tags, and cross-platform support",
+  "theme": "palm",
+  "primaryColor": "#6366f1",
+  "lightColor": "#818cf8",
+  "darkColor": "#4f46e5",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "Core Features",
+            "pages": [
+              "features/notes",
+              "features/folders",
+              "features/tags",
+              "features/organization",
+              "features/authentication"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/creating-notes",
+              "guides/organizing-notes",
+              "guides/searching",
+              "guides/sharing",
+              "guides/mobile-app"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "api/overview",
+              "api/authentication"
+            ]
+          },
+          {
+            "group": "Endpoints",
+            "pages": [
+              "api/endpoints/me",
+              "api/endpoints/notes",
+              "api/endpoints/folders",
+              "api/endpoints/tags"
+            ]
+          },
+          {
+            "group": "React Native",
+            "pages": [
+              "api/react-native/setup",
+              "api/react-native/examples"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Create and edit notes with rich text editor",
+    "Organize notes with folders and tags",
+    "Pin, favorite, and archive notes",
+    "Soft delete with trash and restore",
+    "Authentication with email/password and Google OAuth",
+    "RESTful API for web and mobile apps",
+    "Cross-platform support (web and React Native)",
+    "Note sharing and duplication"
+  ],
+  "publicApiSurface": [
+    "GET /api/me",
+    "GET /api/notes",
+    "POST /api/notes",
+    "PATCH /api/notes/:id",
+    "POST /api/notes/:id/duplicate",
+    "POST /api/notes/:id/toggle-pin",
+    "POST /api/notes/:id/toggle-favorite",
+    "POST /api/notes/:id/toggle-archive",
+    "POST /api/notes/:id/trash",
+    "POST /api/notes/:id/restore",
+    "GET /api/folders",
+    "POST /api/folders",
+    "PATCH /api/notes/:id/folder",
+    "GET /api/tags",
+    "POST /api/tags"
+  ]
+}
